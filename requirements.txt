@@ -1,0 +1,3 @@
+ollama
+prompt_toolkit
+pytest
