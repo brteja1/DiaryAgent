@@ -121,17 +121,3 @@ def overlap_count(text: str, tokens: Sequence[str]) -> int:
 def score_text(text: str, tokens: Sequence[str]) -> int:
     lowered = text.lower()
     return sum(3 if token in lowered else 0 for token in tokens) + overlap_count(text, tokens)
-
-
-def detect_todo_candidates(raw_update: str) -> list[str]:
-    patterns = [
-        "remind me",
-        "todo",
-        "to do",
-        "need to",
-        "follow up",
-        "don't forget",
-        "remember to",
-    ]
-    lowered = raw_update.lower()
-    return [pattern for pattern in patterns if pattern in lowered]

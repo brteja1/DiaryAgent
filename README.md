@@ -7,6 +7,7 @@ It stores notes as Markdown files, one file per day, and is designed to run offl
 ## Features
 
 - Capture informal updates and convert them into concise Markdown bullets.
+- Preserve nested bullet hierarchy when a single update naturally expands into sub-points.
 - Store daily notes in `dd_mm_yyyy.md` files.
 - Detect and manage open TODO items using Markdown checkboxes.
 - Avoid duplicate or near-duplicate TODOs.
@@ -100,7 +101,13 @@ Behavior:
 
 - Opens a multiline terminal editor.
 - `Ctrl+D` submits the current note.
-- The note is polished into Markdown bullets using Ollama.
+- `Alt+R` rewrites the current buffer with Ollama on demand.
+- While a rewrite is running, the editor status shows that it is waiting for the LLM rewrite.
+- The rewritten text is applied back into the same editor buffer, where you can keep editing before saving.
+- Whatever is in the editor when you press `Ctrl+D` is written to the diary verbatim under the timestamp heading.
+- After a successful interactive save, the app immediately prompts for tags for the newly written timestamp section.
+- The tag prompt shows the existing HTFS tags and also accepts new comma-separated tags.
+- Nested bullets are preserved when useful, but the rewrite does not introduce new Markdown sections.
 
 TODO review is handled separately through:
 
@@ -142,7 +149,7 @@ Behavior:
 - Any other format is rejected with an error.
 - The matching diary entry is shown exactly as stored.
 - If `prompt_toolkit` is available, the entry opens in a scrollable terminal viewer.
-- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, and exits with `q`, `Esc`, or `Ctrl+C`.
+- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, `g` to fuzzy-pick another existing entry, and exits with `q`, `Esc`, or `Ctrl+C`.
 - If `prompt_toolkit` is unavailable, the stored entry is printed to stdout.
 
 ### Show A Specific Day
@@ -150,6 +157,30 @@ Behavior:
 ```bash
 python diary_agent.py show "05_03_2026"
 ```
+
+### Section Tags
+
+Diary sections are identified by day plus the time heading inside that day file.
+
+Examples:
+
+```bash
+python diary_agent.py tags show 26_03_2026 14:30
+python diary_agent.py tags apply 26_03_2026 14:30 Project/DiaryAgent Topic/Retrieval
+python diary_agent.py tags suggest 26_03_2026 14:30
+```
+
+Behavior:
+
+- `tags show` prints the HTFS tags currently attached to one timestamp section.
+- `tags apply` ensures the given tags exist in HTFS and applies them to that section.
+- `tags suggest` uses the configured model to suggest tags from the existing HTFS tag set.
+- Section ids are derived internally in the form `dd_mm_yyyy.md#HH:MM`.
+- The configured diary path is the HTFS boundary.
+- If HTFS metadata has not been initialized there yet, Diary Agent initializes it automatically on first tag use.
+- Hierarchical tags are passed to HTFS exactly as entered.
+- If you enter a tag like `T1/T2/T3`, HTFS is responsible for creating and linking `T1`, `T2`, and `T3`.
+- To conform to HTFS resource-tagging rules, Diary Agent assigns the section resource to the leaf tag name only, for example `T3`.
 
 ### Override Configured Model
 
@@ -169,11 +200,23 @@ Diary files are stored in the configured diary folder like this:
 26_03_2026.md
 ```
 
-Generated notes use Markdown bullets:
+Generated notes are grouped under time-based Markdown headings:
 
 ```markdown
+## 14:30
+
 - Finished the payment reconciliation task.
 - [ ] Follow up with the design team about the dashboard mockups.
+```
+
+If a note naturally contains sub-points, nested bullets are retained:
+
+```markdown
+## 16:10
+
+- Project work
+  - Finished auth cleanup
+  - Added regression coverage
 ```
 
 ## TODO Behavior

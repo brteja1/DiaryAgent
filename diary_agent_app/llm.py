@@ -45,7 +45,10 @@ def synthesize_entry(
                 "for actionable reminders or TODOs (items the user intends to do in the future), "
                 "and '- ...' for regular notes (observations, reflections, completed actions, "
                 "or information). Do not repeat unresolved TODOs that already exist in the diary. "
-                "Do not add headings, preambles, or commentary."
+                "Treat today's existing notes as background context only. Rewrite only the new raw "
+                "update and do not restate, summarize, or copy earlier entries from today's file. "
+                "Do not add headings, preambles, or commentary. If one point needs sub-points, "
+                "keep them as indented nested bullets under that point instead of introducing sections."
             ),
         },
         {
@@ -61,7 +64,16 @@ def synthesize_entry(
         response = ollama.chat(model=model, messages=messages)
     except Exception as exc:
         raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
-    return response["message"]["content"].strip()
+    return strip_generated_headings(response["message"]["content"])
+
+
+def strip_generated_headings(text: str) -> str:
+    filtered_lines: list[str] = []
+    for raw_line in text.strip().splitlines():
+        if re.match(r"^\s*#{1,6}\s+", raw_line):
+            continue
+        filtered_lines.append(raw_line.rstrip())
+    return "\n".join(filtered_lines).strip()
 
 
 def answer_query(model: str, query: str, matches: Sequence[tuple[Path, str, int]]) -> str:
@@ -95,73 +107,6 @@ def answer_query(model: str, query: str, matches: Sequence[tuple[Path, str, int]
     return response["message"]["content"].strip()
 
 
-def organize_day_entry(model: str, body: str) -> str:
-    stripped = body.strip()
-    if not stripped:
-        return ""
-
-    try:
-        require_ollama()
-        response = ollama.chat(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You reorganize a single day's diary entry into clearer Markdown sections. "
-                        "Group related items by relevance or topic, not by original order alone. "
-                        "Preserve every concrete item from the source. Do not invent facts, do not "
-                        "drop tasks, and do not summarize multiple bullets into one. Use concise "
-                        "section headings like '## Work', '## Follow-ups', or similar. Keep each "
-                        "original bullet as a Markdown bullet. If an item is a TODO, keep its checkbox state."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": "Reorganize this diary entry:\n\n" + stripped,
-                },
-            ],
-        )
-        organized = response["message"]["content"].strip()
-        if organized:
-            return organized
-    except Exception:
-        pass
-
-    return organize_day_entry_fallback(stripped)
-
-
-def organize_day_entry_fallback(body: str) -> str:
-    sections: list[tuple[str, list[str]]] = [
-        ("Pending TODOs", []),
-        ("Completed TODOs", []),
-        ("Notes", []),
-        ("Other", []),
-    ]
-
-    for raw_line in body.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if re.match(r"^- \[ \] ", line):
-            sections[0][1].append(line)
-            continue
-        if re.match(r"^- \[[xX]\] ", line):
-            sections[1][1].append(line)
-            continue
-        if line.startswith("- "):
-            sections[2][1].append(line)
-            continue
-        sections[3][1].append(f"- {line}")
-
-    rendered_sections = [
-        "## " + title + "\n" + "\n".join(lines)
-        for title, lines in sections
-        if lines
-    ]
-    return "\n\n".join(rendered_sections).strip()
-
-
 def todos_are_semantically_similar(model: str, candidate_text: str, existing_text: str) -> bool:
     require_ollama()
     try:
@@ -189,15 +134,15 @@ def todos_are_semantically_similar(model: str, candidate_text: str, existing_tex
         )
     except Exception:
         return False
-
     verdict = response["message"]["content"].strip().upper()
     return verdict.startswith("YES")
-def classify_as_todo(model: str, text: str) -> bool | None:
-    """
-    Classify whether text represents an actionable TODO using LLM inference.
-    Returns True if it's a TODO, False if it's a regular note, None on error.
-    """
+
+
+def suggest_section_tags(model: str, section_body: str, available_tags: Sequence[str]) -> list[str]:
     require_ollama()
+    if not available_tags:
+        return []
+
     try:
         response = ollama.chat(
             model=model,
@@ -205,24 +150,25 @@ def classify_as_todo(model: str, text: str) -> bool | None:
                 {
                     "role": "system",
                     "content": (
-                        "You classify text as either a TODO/actionable item or a regular note. "
-                        "TODOs are actionable tasks with clear intent to do something in the future. "
-                        "Regular notes are observations, reflections, completed actions, or information. "
-                        "Reply with exactly YES if this is a TODO, NO if it's a regular note."
+                        "You suggest relevant tags for a diary section using only the provided tag list. "
+                        "Return a comma-separated list of exact tag names from the provided list. "
+                        "Do not invent tags, do not explain your answer, and return an empty string if none apply."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": "Text to classify:\n" + text + "\n\nIs this a TODO/actionable item?",
+                    "content": (
+                        "Available tags:\n"
+                        + "\n".join(available_tags)
+                        + "\n\nDiary section:\n"
+                        + section_body.strip()
+                    ),
                 },
             ],
         )
-    except Exception:
-        return None
+    except Exception as exc:
+        raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
 
-    verdict = response["message"]["content"].strip().upper()
-    if verdict.startswith("YES"):
-        return True
-    elif verdict.startswith("NO"):
-        return False
-    return None
+    suggested = [part.strip() for part in response["message"]["content"].split(",") if part.strip()]
+    available = {tag: tag for tag in available_tags}
+    return [available[tag] for tag in suggested if tag in available]

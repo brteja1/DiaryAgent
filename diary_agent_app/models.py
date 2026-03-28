@@ -25,3 +25,22 @@ class SimilarTodoMatch:
 class AppConfig:
     diary_dir: Path
     llm_model: str
+
+
+@dataclass(frozen=True)
+class DiaryEntryOption:
+    file_path: Path
+    title: str
+    preview: str
+    search_text: str
+
+
+@dataclass(frozen=True)
+class DiarySection:
+    file_path: Path
+    heading: str
+    body: str
+
+    @property
+    def section_id(self) -> str:
+        return f"{self.file_path.name}#{self.heading}"

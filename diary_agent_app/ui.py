@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import sys
+from collections.abc import Callable, Sequence
 
-from .models import SimilarTodoMatch
+from .models import DiaryEntryOption, SimilarTodoMatch
 
 try:
     from prompt_toolkit.application import Application
     from prompt_toolkit.layout import HSplit, Layout
-    from prompt_toolkit.layout.containers import Window
+    from prompt_toolkit.layout.containers import ConditionalContainer, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.filters import Condition
     from prompt_toolkit.widgets import Box, Frame, TextArea
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import HTML
@@ -20,8 +23,10 @@ except ImportError:  # pragma: no cover - runtime dependency
     Application = None
     HSplit = None
     Layout = None
+    ConditionalContainer = None
     Window = None
     FormattedTextControl = None
+    Condition = None
     Box = None
     Frame = None
     TextArea = None
@@ -61,10 +66,12 @@ def require_prompt_toolkit() -> None:
         or Application is None
         or HSplit is None
         or Layout is None
+        or ConditionalContainer is None
         or HTML is None
         or KeyBindings is None
         or Window is None
         or FormattedTextControl is None
+        or Condition is None
         or Box is None
         or Frame is None
         or TextArea is None
@@ -123,21 +130,93 @@ def confirm_similar_todo_addition_cli(match: SimilarTodoMatch, stdin=None) -> bo
         print("Please answer y or n.")
 
 
-def launch_editor(initial_text: str = "") -> str:
+def prompt_for_section_tags(existing_tags: Sequence[str]) -> list[str]:
+    prompt_text = "Section tags> "
+    if existing_tags:
+        print("\nExisting HTFS tags:")
+        print(", ".join(existing_tags))
+    else:
+        print("\nNo existing HTFS tags yet.")
+    print("Enter tags separated by commas, or press Enter to skip.")
+
+    try:
+        require_prompt_toolkit()
+        session = PromptSession()
+        raw_value = session.prompt(prompt_text)
+    except RuntimeError:
+        raw_value = input(prompt_text)
+
+    return [part.strip() for part in raw_value.split(",") if part.strip()]
+
+
+def launch_editor(
+    initial_text: str = "",
+    state: str = "Capturing update",
+    rewrite: Callable[[str], str] | None = None,
+) -> str:
     try:
         require_prompt_toolkit()
         session = PromptSession(multiline=True)
         bindings = KeyBindings()
+        editor_state = {
+            "message": state,
+            "rewriting": False,
+            "rewrite_ready": False,
+        }
+        session.default_buffer.read_only = Condition(lambda: editor_state["rewriting"])
 
         @bindings.add("c-d")
         def _(event) -> None:
+            if editor_state["rewriting"]:
+                return
             event.current_buffer.validate_and_handle()
+
+        @bindings.add("escape", "r")
+        def _(event) -> None:
+            if rewrite is None or editor_state["rewriting"]:
+                return
+
+            current_text = event.current_buffer.text
+            editor_state["rewriting"] = True
+            editor_state["message"] = "Waiting for LLM rewrite..."
+            event.app.invalidate()
+
+            async def rewrite_task() -> None:
+                try:
+                    loop = asyncio.get_running_loop()
+                    rewritten = await loop.run_in_executor(None, rewrite, current_text)
+                except Exception as exc:  # pragma: no cover - interactive UI boundary
+                    editor_state["message"] = f"Rewrite failed: {exc}"
+                    editor_state["rewriting"] = False
+                else:
+                    editor_state["rewriting"] = False
+                    editor_state["rewrite_ready"] = True
+                    event.current_buffer.text = rewritten
+                    event.current_buffer.cursor_position = len(rewritten)
+                    editor_state["message"] = "Rewrite applied."
+                finally:
+                    event.app.invalidate()
+
+            event.app.create_background_task(rewrite_task())
 
         return session.prompt(
             "Diary update> ",
             default=initial_text,
             key_bindings=bindings,
-            bottom_toolbar=lambda: status_toolbar("Capturing update"),
+            bottom_toolbar=lambda: status_toolbar(
+                (
+                    "Waiting for LLM rewrite..."
+                    if editor_state["rewriting"]
+                    else (
+                        editor_state["message"]
+                        + (
+                            "  Alt+R rewrite again"
+                            if rewrite is not None and editor_state["rewrite_ready"]
+                            else ("  Alt+R rewrite" if rewrite is not None else "")
+                        )
+                    )
+                )
+            ),
         )
     except RuntimeError:
         # CLI fallback
@@ -159,6 +238,7 @@ def show_diary_entry(
     body: str,
     previous_entry=None,
     next_entry=None,
+    pick_entry=None,
 ) -> None:
     require_prompt_toolkit()
 
@@ -169,25 +249,97 @@ def show_diary_entry(
         focusable=True,
         wrap_lines=False,
     )
+    query_input = TextArea(
+        height=1,
+        multiline=False,
+        wrap_lines=False,
+        prompt="Jump to> ",
+    )
+    picker_state = {"open": False, "selected": 0}
+
+    def picker_filter() -> bool:
+        return picker_state["open"]
+
+    picker_visible = Condition(picker_filter)
     help_bar = Window(
         height=1,
         content=FormattedTextControl(
-            HTML(
-                "<b>Browse:</b> Arrow keys / PageUp / PageDown  "
-                "<b>Jump:</b> [ / ]  "
+            lambda: HTML(
+                "<b>Move:</b> Up / Down  "
+                "<b>Select:</b> Enter  "
+                "<b>Cancel:</b> Esc"
+                if picker_state["open"]
+                else "<b>Browse:</b> Arrow keys / PageUp / PageDown  "
+                "<b>Jump:</b> [ / ] / g  "
                 "<b>Exit:</b> q, Esc, Ctrl+C"
             )
         ),
     )
 
     frame = Frame(text_area, title=title)
+    picker_frame = Frame(query_input, title="Jump To Entry")
+
+    def filtered_options() -> list[DiaryEntryOption]:
+        if pick_entry is None:
+            return []
+        query = " ".join(query_input.text.lower().split())
+        options = list(pick_entry())
+        if not query:
+            return options
+        terms = query.split()
+        return [
+            option
+            for option in options
+            if all(term in option.search_text for term in terms)
+        ]
+
+    def render_results():
+        matches = filtered_options()
+        if not matches:
+            picker_state["selected"] = 0
+            return [("", "No matching entries.")]
+
+        if picker_state["selected"] >= len(matches):
+            picker_state["selected"] = len(matches) - 1
+
+        fragments: list[tuple[str, str]] = []
+        for index, option in enumerate(matches):
+            style = "reverse" if index == picker_state["selected"] else ""
+            fragments.append((style, option.title))
+            if option.preview:
+                fragments.append((style, f"  {option.preview}"))
+            fragments.append(("", "\n"))
+        return fragments[:-1]
+
+    results_window = Window(
+        content=FormattedTextControl(render_results),
+        always_hide_cursor=True,
+    )
+    picker_results_frame = Frame(results_window, title="Matches")
 
     bindings = KeyBindings()
 
     @bindings.add("q")
-    @bindings.add("escape")
     @bindings.add("c-c")
     def _(event) -> None:
+        if picker_state["open"]:
+            picker_state["open"] = False
+            query_input.text = ""
+            picker_state["selected"] = 0
+            event.app.layout.focus(text_area)
+            event.app.invalidate()
+            return
+        event.app.exit()
+
+    @bindings.add("escape")
+    def _(event) -> None:
+        if picker_state["open"]:
+            picker_state["open"] = False
+            query_input.text = ""
+            picker_state["selected"] = 0
+            event.app.layout.focus(text_area)
+            event.app.invalidate()
+            return
         event.app.exit()
 
     def move_to_entry(loader) -> None:
@@ -209,10 +361,63 @@ def show_diary_entry(
     def _(event) -> None:
         move_to_entry(next_entry)
 
+    @bindings.add("g")
+    def _(event) -> None:
+        if pick_entry is None:
+            return
+        picker_state["open"] = True
+        picker_state["selected"] = 0
+        query_input.text = ""
+        event.app.layout.focus(query_input)
+        event.app.invalidate()
+
+    query_input.buffer.on_text_changed += lambda _event: (
+        picker_state.__setitem__("selected", 0)
+    )
+
+    @bindings.add("down", filter=picker_visible)
+    @bindings.add("c-n", filter=picker_visible)
+    def _(event) -> None:
+        matches = filtered_options()
+        if matches:
+            picker_state["selected"] = min(picker_state["selected"] + 1, len(matches) - 1)
+            event.app.invalidate()
+
+    @bindings.add("up", filter=picker_visible)
+    @bindings.add("c-p", filter=picker_visible)
+    def _(event) -> None:
+        if filtered_options():
+            picker_state["selected"] = max(picker_state["selected"] - 1, 0)
+            event.app.invalidate()
+
+    @bindings.add("enter", filter=picker_visible)
+    def _(event) -> None:
+        matches = filtered_options()
+        if not matches:
+            return
+        selected = matches[picker_state["selected"]]
+        frame.title = selected.file_path.name
+        text_area.text = selected.file_path.read_text(encoding="utf-8").rstrip()
+        text_area.buffer.cursor_position = 0
+        picker_state["open"] = False
+        query_input.text = ""
+        picker_state["selected"] = 0
+        event.app.layout.focus(text_area)
+        event.app.invalidate()
+
     root = Box(
         body=HSplit(
             [
-                frame,
+                ConditionalContainer(frame, filter=~picker_visible),
+                ConditionalContainer(
+                    HSplit(
+                        [
+                            picker_frame,
+                            picker_results_frame,
+                        ]
+                    ),
+                    filter=picker_visible,
+                ),
                 help_bar,
             ]
         ),

@@ -40,6 +40,7 @@ This file describes the current implemented behavior of the diary agent in this 
 - Creates the configured diary directory if it does not already exist.
 - Stores daily notes in files named `dd_mm_yyyy.md`.
 - Appends new content to the current day's file instead of overwriting existing content.
+- The filename already carries the date; per-entry headings inside the file carry only time.
 - Reads today's existing file before generating new diary output so the model has continuity context.
 
 ## Capture Workflow
@@ -50,6 +51,12 @@ This file describes the current implemented behavior of the diary agent in this 
   - Supports standard text entry, cursor movement, backspace, and multiline input.
   - Shows a bottom status toolbar with date/time and current state.
   - `Ctrl+D` explicitly submits the current buffer.
+  - `Alt+R` explicitly requests an Ollama rewrite of the current buffer.
+  - While the rewrite is in progress, the editor status indicates that it is waiting for the LLM rewrite.
+  - When the rewrite finishes, the rewritten text replaces the current editor buffer in place.
+  - The exact text present in the editor when `Ctrl+D` is pressed is written to the diary verbatim.
+  - After a successful interactive save, the app immediately prompts for tags for the newly written timestamp section.
+  - The tag prompt lists existing HTFS tags and accepts new comma-separated tags from the user.
 - CLI fallback capture flow (without prompt_toolkit):
   - Prompts for input via stdin.
   - Empty line or Ctrl-D finishes input.
@@ -59,9 +66,14 @@ This file describes the current implemented behavior of the diary agent in this 
 ## Diary Formatting
 
 - Raw informal updates are sent to Ollama and converted into concise Markdown bullets.
+- Each appended capture is stored under a Markdown heading containing only the capture time, for example `## 14:30`.
 - The LLM decides semantically whether items are TODOs or regular notes.
 - Regular notes are generated as `- ...`.
 - Action-oriented reminders and TODO-like text are generated as `- [ ] ...`.
+- Nested bullet hierarchy is preserved when the generated rewrite contains sub-points.
+- LLM-generated section headings are not retained in the stored rewrite.
+- The stored rewrite keeps the LLM's bullet hierarchy, but not any LLM-added top-level sections.
+- In interactive capture mode, the final editor contents are not post-processed before being appended.
 - The generation prompt instructs the model not to repeat unresolved TODOs already present in the diary.
 
 ## TODO Management
@@ -109,6 +121,57 @@ This file describes the current implemented behavior of the diary agent in this 
   - Sends the best excerpts to Ollama.
   - Returns a synthesized answer based only on the retrieved excerpts.
   - Prints the relevant excerpts after the answer.
+
+## Show Command
+
+- Supports viewing a day's diary entry through:
+  - `python diary_agent.py show`
+  - `python diary_agent.py show "dd_mm_yyyy"`
+- If `show` is run without an argument, it defaults to today's date.
+- If a day argument is provided, it must match `dd_mm_yyyy`; other formats are rejected with a clear error.
+- If the target diary file does not exist, the command reports that no entry was found.
+- With `prompt_toolkit` available, the entry opens in a full-screen read-only viewer.
+- Without `prompt_toolkit`, the stored entry is printed to stdout.
+
+## Show Viewer Navigation
+
+- The show viewer is read-only; it no longer offers an LLM-based reorganize action.
+- Standard scrolling/navigation is provided by the `prompt_toolkit` text area and terminal paging keys.
+- `[` moves to the previous existing diary file in filename/date order.
+- `]` moves to the next existing diary file in filename/date order.
+- If there is no previous or next entry, that navigation key is a no-op.
+- `g` opens an in-place fuzzy picker for existing diary entries.
+- The fuzzy picker:
+  - lists existing diary files only
+  - orders them newest first
+  - shows a human-readable date label plus a preview line
+  - filters incrementally using date-oriented search text
+  - updates the current viewer in place when an entry is selected
+  - cancels cleanly with `Esc` without leaving the current entry
+
+## Section Identity
+
+- Timestamp sections are treated as first-class units inside a day file.
+- A stable section id is derived as:
+  - `dd_mm_yyyy.md#HH:MM`
+- Section parsing currently uses `## HH:MM` headings as boundaries.
+- Text before the first timestamp heading is ignored for section parsing.
+
+## HTFS Tag Commands
+
+- Supports section-level HTFS tagging through:
+  - `python diary_agent.py tags show <day> <time>`
+  - `python diary_agent.py tags apply <day> <time> <tag...>`
+  - `python diary_agent.py tags suggest <day> <time>`
+- `tags show` prints the HTFS tags for one timestamp section.
+- `tags apply` ensures the provided tags exist in HTFS and then applies them to the section.
+- `tags suggest` asks the configured model to suggest tags from the currently available HTFS tag set.
+- HTFS integration operates on timestamp sections, not whole day files.
+- The configured diary path is the HTFS boundary.
+- If `.tagfs.db` is not present in the diary path yet, HTFS metadata is initialized there automatically on first tag use.
+- Hierarchical tags are forwarded to HTFS exactly as entered.
+- For a tag like `T1/T2/T3`, HTFS owns the creation of the hierarchy and intermediate nodes.
+- To conform to HTFS resource-tagging behavior, Diary Agent assigns the timestamp section to the leaf tag name only, for example `T3`.
 
 ## Error Handling
 

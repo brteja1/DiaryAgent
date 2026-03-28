@@ -2,35 +2,40 @@
 
 ## Overview
 
-The diary agent is a local-first Python CLI for capturing daily notes, managing persistent TODOs, and querying diary history using a locally reachable Ollama model. It is designed around three primary workflows:
+The diary agent is a local-first Python CLI for capturing daily notes, managing persistent TODOs, viewing prior entries, and querying diary history using a locally reachable Ollama model. The current implementation is organized around four user-facing workflows:
 
-- capture a free-form daily update and append a polished Markdown entry
-- review and complete open TODO items across diary history
+- capture a free-form update into today's diary file
+- review and complete open TODOs across diary history
+- view a day entry and navigate to other existing entries
 - search historical diary content with a natural-language question
 
-The implementation lives in [diary_agent.py](/linuxdev/code_snippets/diary_agent/diary_agent.py).
+The implementation currently lives in [`diary_agent.py`](/linuxdev/github/DiaryAgent/diary_agent.py) plus small supporting modules under [`diary_agent_app/`](/linuxdev/github/DiaryAgent/diary_agent_app).
 
 ## Design Goals
 
 - Keep diary storage outside the source tree and make it user-configurable.
 - Use a local terminal workflow without requiring a GUI application.
-- Preserve diary continuity by conditioning new note generation on today's existing file.
+- Preserve continuity by showing today's existing notes to the LLM as background context.
 - Keep TODO handling persistent across all diary files, not just the current day.
-- Reduce accidental TODO duplication with deterministic filtering, semantic similarity checks, and LLM-based TODO classification.
+- Reduce accidental TODO duplication with deterministic filtering plus semantic similarity checks.
+- Let the user retain final control over interactive capture output before it is written.
 - Degrade clearly when dependencies or local model connectivity are missing.
-- Work with or without prompt_toolkit (CLI fallbacks for both editor and TODO prompts).
+- Work with or without `prompt_toolkit` where feasible.
 
 ## High-Level Architecture
 
-The system is intentionally implemented as a single-file CLI with small internal layers:
+The current code is split into a thin CLI/orchestration layer and three small support modules:
 
-1. Configuration layer
-2. Core diary domain logic
-3. LLM integration
-4. Terminal interaction layer
-5. CLI entrypoint and command routing
+1. [`diary_agent.py`](/linuxdev/github/DiaryAgent/diary_agent.py)
+   Handles CLI parsing, command routing, and the main `DiaryAgent` domain object.
+2. [`diary_agent_app/core.py`](/linuxdev/github/DiaryAgent/diary_agent_app/core.py)
+   Holds shared parsing, config, tokenization, and local search helpers.
+3. [`diary_agent_app/llm.py`](/linuxdev/github/DiaryAgent/diary_agent_app/llm.py)
+   Holds Ollama-backed synthesis, answer generation, and TODO similarity checks.
+4. [`diary_agent_app/ui.py`](/linuxdev/github/DiaryAgent/diary_agent_app/ui.py)
+   Holds `prompt_toolkit` editor, dialogs, and show-viewer interactions.
 
-This keeps deployment simple while still separating concerns inside the code.
+This keeps deployment simple while still separating terminal behavior, LLM behavior, and file/domain logic.
 
 ## Configuration Model
 
@@ -61,14 +66,28 @@ Properties:
 
 - The directory is created lazily on demand.
 - The current day's file is created only when something is appended.
-- Existing content is preserved and new entries are appended with blank-line separation.
-- Duplicate entries (both TODOs and regular notes) are filtered out before appending.
+- The filename carries the date; individual captures within the file are grouped under time-only headings like `## 14:30`.
+- Existing content is preserved and new captures are appended with blank-line separation.
+- The system treats all `*.md` files in the configured diary directory as part of history for TODO scanning, show navigation, and search.
 
-The system treats all `*.md` files in the configured diary directory as part of history for TODO scanning and search.
+The on-disk format is intentionally Markdown-first. A typical day file looks like:
+
+```markdown
+## 09:15
+
+- Reviewed deployment logs
+- [ ] Follow up on the retry spike
+
+## 14:30
+
+- Project work
+  - Finished auth cleanup
+  - Added regression coverage
+```
 
 ## Core Domain Objects
 
-The implementation currently uses three small data objects:
+The implementation currently uses four small data objects:
 
 - `PendingTask`
   - represents an unchecked task line and its source file/line
@@ -76,6 +95,8 @@ The implementation currently uses three small data objects:
   - represents a new candidate TODO and the existing open TODO it resembles
 - `AppConfig`
   - represents resolved user configuration, currently `diary_dir` and `llm_model`
+- `DiaryEntryOption`
+  - represents a selectable diary file in the show-screen fuzzy picker
 
 These objects are deliberately narrow and map directly to operational workflows.
 
@@ -88,13 +109,17 @@ The capture path is the default CLI behavior.
 1. Resolve config.
 2. Ensure the diary storage directory exists.
 3. Open a multiline `prompt_toolkit` editor.
-4. Submit the current buffer with `Ctrl+D`.
-5. Send the raw text to Ollama for Markdown bullet generation.
-6. Remove duplicate entries deterministically (both TODOs and regular notes).
-7. Review semantically similar TODOs against unresolved historical tasks.
-8. Append the surviving entry to today's file.
-9. If open TODOs exist, ask whether the user wants to see them.
-10. If the user says yes, open the TODO checklist and allow completion updates.
+4. The user may press `Alt+R` at any point to request an Ollama rewrite of the current buffer.
+5. While the rewrite is running, the buffer is locked read-only and the toolbar shows that the editor is waiting for the LLM rewrite.
+6. When the rewrite finishes, the rewritten text replaces the current editor buffer in place.
+7. The user may keep editing, trigger another rewrite, or press `Ctrl+D` to submit whatever is currently in the buffer.
+8. The submitted text is appended to today's file verbatim under a time heading.
+
+Important current behavior:
+
+- The interactive final buffer is not post-processed before save.
+- This means user-authored headings or manual structure edits are preserved as entered.
+- The LLM rewrite path itself removes LLM-added section headings and filters out lines already present in today's file before putting the rewritten draft back into the editor.
 
 ### CLI Fallback Path (without prompt_toolkit)
 
@@ -102,19 +127,17 @@ The capture path is the default CLI behavior.
 2. Ensure the diary storage directory exists.
 3. Prompt for input via stdin (empty line or Ctrl-D to finish).
 4. Send the raw text to Ollama for Markdown bullet generation.
-5. Remove duplicate entries deterministically.
+5. Remove duplicate entries deterministically against today's file.
 6. Review semantically similar TODOs against unresolved historical tasks.
-7. Append the surviving entry to today's file.
-8. If open TODOs exist, prompt `y/N` to show them.
-9. If yes, show numbered list and allow selecting to mark complete.
+7. Append the surviving entry to today's file under a time heading.
 
 ### Non-Interactive Path
 
-The `capture --text "..."` path skips the editor and uses the provided text as input. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically.
+The `capture --text "..."` path skips the editor and uses the provided text as input. In this path the rewritten entry still goes through deterministic dedupe and TODO similarity review before append. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically.
 
 ## LLM Integration
 
-The system uses Ollama for four separate tasks.
+The system currently uses Ollama for three tasks.
 
 Model selection comes from the config file by default, with `--model` available as an explicit runtime override.
 
@@ -128,28 +151,28 @@ Input:
 
 Output:
 
-- concise Markdown bullet points
+- concise Markdown bullets, optionally with nested sub-bullets
 
-The prompt instructs the LLM to:
+The synthesis prompt instructs the LLM to:
 
 - preserve factual content
-- keep continuity with today's notes
+- use today's file only as background context
+- rewrite only the new raw update
 - decide semantically whether items are TODOs or regular notes
-- format actionable items as TODO checkboxes
-- avoid headings or commentary
+- format actionable items as `- [ ] ...`
+- avoid headings, commentary, or section structure
+- preserve hierarchy with nested bullets when appropriate
 - avoid repeating unresolved TODOs already in the diary
 
-### 2. TODO Classification
+The implementation also strips any Markdown headings the LLM still produces before presenting rewritten output back to the user.
 
-For programmatic classification needs, the `classify_as_todo()` function uses LLM inference to determine whether text represents an actionable TODO or a regular note. Returns `YES` or `NO`.
-
-### 3. TODO Similarity Decision
+### 2. TODO Similarity Decision
 
 For each candidate unchecked TODO that survives exact dedupe, the system can ask Ollama whether it is effectively the same unresolved task as an existing open TODO. The model is instructed to answer only `YES` or `NO`.
 
 This is used as a second-stage filter after lexical shortlisting.
 
-### 4. History Answer Synthesis
+### 3. History Answer Synthesis
 
 For natural-language search, the system retrieves candidate text excerpts first and only then asks Ollama to answer based on those excerpts.
 
@@ -179,28 +202,53 @@ Completed TODOs are recognized by:
 
 The `todos` subcommand provides dedicated TODO management:
 
-```
+```bash
 python diary_agent.py todos
 ```
 
-Uses the shared `prompt_for_task_completion` function from the dedicated `todos` command, ensuring consistent behavior.
+This reuses the same completion logic as the checklist dialog path.
 
 ### Duplicate Prevention
 
-There are multiple layers of deduplication:
+There are two active dedupe layers:
 
 1. Entry-level dedupe
-   - All entries (TODOs + regular notes) are checked against existing content
-   - Uses normalized text comparison via `normalize_todo_text()`
-   - Also filters duplicates within the new entry itself
+   - All entry lines are compared against today's existing file
+   - Duplicates within the candidate entry itself are also removed
+   - The comparison is normalized and near-duplicate tolerant, not exact-string only
 
-2. Completed TODO tracking
-   - `open_todo_keys()` checks ALL todos (pending + completed)
-   - Prevents re-adding completed todos as new
+2. TODO-specific dedupe and similarity review
+   - Open and completed TODO text is tracked across all diary files
+   - Exact duplicate TODOs are removed before append
+   - Candidate TODOs are then checked for semantic similarity against unresolved tasks
+   - Interactive confirmation is available when the flow supports it
 
-3. Exact and near-exact dedupe
-   - normalizes text by tokenization and removes repeats against existing open TODOs
+## Show Flow
 
-4. Semantic similarity check
-   - LLM-backed check for semantically similar TODOs
-   - Prompts user (interactive) or skips (non-interactive)
+The `show` command supports both direct lookup and in-view navigation:
+
+```bash
+python diary_agent.py show
+python diary_agent.py show "05_03_2026"
+```
+
+Behavior:
+
+- With no argument, `show` defaults to today's date.
+- With a `dd_mm_yyyy` argument, it opens that specific day.
+- The `prompt_toolkit` viewer is read-only.
+- `[` and `]` move to the previous or next existing diary file in filename/date order.
+- At the ends of history, navigation is a no-op.
+- `g` opens an in-place fuzzy picker over existing diary files.
+- The picker lists newest first and shows a human-readable date plus a preview line.
+- Without `prompt_toolkit`, the file contents are printed to stdout.
+
+## Search Flow
+
+The `search` command retrieves local text excerpts using token overlap scoring and then asks the LLM to answer using only those excerpts.
+
+```bash
+python diary_agent.py search "What did I note about the login bug?"
+```
+
+The design intentionally keeps retrieval local and cheap before invoking the model.

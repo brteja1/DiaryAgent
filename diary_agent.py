@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import List, Sequence
 
 from diary_agent_app import core, llm, ui
-from diary_agent_app.models import AppConfig, PendingTask, SimilarTodoMatch
+from diary_agent_app.htfs_adapter import HTFSAdapter
+from diary_agent_app.models import AppConfig, DiaryEntryOption, DiarySection, PendingTask, SimilarTodoMatch
 
 TODO_RE = core.TODO_RE
 DATE_FMT = core.DATE_FMT
 CONFIG_RELATIVE_PATH = core.CONFIG_RELATIVE_PATH
 DIALOG_STYLE = ui.DIALOG_STYLE
+SECTION_HEADING_RE = re.compile(r"^## (?P<time>\d{2}:\d{2})\s*$")
 
 
 class DiaryAgent:
@@ -44,6 +46,71 @@ class DiaryAgent:
     def diary_files(self) -> list[Path]:
         return sorted(self.diary_dir.glob("*.md"))
 
+    def entry_options(self) -> list[DiaryEntryOption]:
+        options: list[DiaryEntryOption] = []
+        for file_path in reversed(self.diary_files()):
+            body = file_path.read_text(encoding="utf-8").rstrip()
+            preview = next((line.strip() for line in body.splitlines() if line.strip()), "(empty entry)")
+            title = format_entry_title(file_path.stem)
+            search_text = build_entry_search_text(file_path.stem, title)
+            options.append(
+                DiaryEntryOption(
+                    file_path=file_path,
+                    title=title,
+                    preview=preview,
+                    search_text=search_text,
+                )
+            )
+        return options
+
+    def parse_day_sections(self, file_path: Path) -> list[DiarySection]:
+        if not file_path.exists():
+            return []
+
+        sections: list[DiarySection] = []
+        current_heading: str | None = None
+        current_lines: list[str] = []
+
+        def flush_section() -> None:
+            if current_heading is None:
+                return
+            sections.append(
+                DiarySection(
+                    file_path=file_path,
+                    heading=current_heading,
+                    body="\n".join(current_lines).strip(),
+                )
+            )
+
+        for raw_line in file_path.read_text(encoding="utf-8").splitlines():
+            match = SECTION_HEADING_RE.fullmatch(raw_line.strip())
+            if match:
+                flush_section()
+                current_heading = match.group("time")
+                current_lines = []
+                continue
+
+            if current_heading is None:
+                continue
+            current_lines.append(raw_line.rstrip())
+
+        flush_section()
+        return sections
+
+    def section_for_id(self, section_id: str) -> DiarySection | None:
+        if "#" not in section_id:
+            return None
+        file_name, heading = section_id.split("#", 1)
+        target = self.diary_dir / file_name
+        for section in self.parse_day_sections(target):
+            if section.heading == heading:
+                return section
+        return None
+
+    def latest_section_for_file(self, file_path: Path) -> DiarySection | None:
+        sections = self.parse_day_sections(file_path)
+        return sections[-1] if sections else None
+
     def adjacent_entry(self, current_path: Path, step: int) -> tuple[str, str] | None:
         files = self.diary_files()
         try:
@@ -61,13 +128,48 @@ class DiaryAgent:
     def append_entry(self, entry: str) -> tuple[Path, bool]:
         path = self.today_file()
         existing = path.read_text(encoding="utf-8").rstrip() if path.exists() else ""
+        new_lines = self.filter_new_entry_lines(entry, existing)
+
+        if not new_lines:
+            return path, False
+
+        timestamp_heading = self.entry_timestamp_heading()
+        timestamped_entry = "\n".join([timestamp_heading, "", "\n".join(new_lines)])
+        pieces = [part for part in [existing, timestamped_entry] if part]
+        path.write_text("\n\n".join(pieces) + "\n", encoding="utf-8")
+        return path, True
+
+    def prepare_rewrite_for_review(self, entry: str) -> str:
+        existing = self.read_today_context()
+        return "\n".join(self.filter_new_entry_lines(entry, existing)).strip()
+
+    def append_entry_verbatim(self, entry: str) -> tuple[Path, bool]:
+        path = self.today_file()
+        rendered_entry = entry.rstrip()
+        if not rendered_entry.strip():
+            return path, False
+
+        existing = path.read_text(encoding="utf-8").rstrip() if path.exists() else ""
+        timestamped_entry = "\n".join([self.entry_timestamp_heading(), "", rendered_entry])
+        pieces = [part for part in [existing, timestamped_entry] if part]
+        path.write_text("\n\n".join(pieces) + "\n", encoding="utf-8")
+        return path, True
+
+    def extract_entry_lines(self, entry: str) -> list[str]:
+        return [
+            line.rstrip()
+            for line in entry.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+    def filter_new_entry_lines(self, entry: str, existing: str) -> list[str]:
         existing_lines = self.extract_entry_lines(existing)
         existing_texts = [self.entry_line_text(line) for line in existing_lines]
         accepted_texts: list[str] = []
         new_lines: list[str] = []
-        for line in entry.strip().splitlines():
-            line = line.strip()
-            if not line:
+        for raw_line in entry.strip().splitlines():
+            line = raw_line.rstrip()
+            if not line.strip():
                 continue
 
             line_text = self.entry_line_text(line)
@@ -81,24 +183,22 @@ class DiaryAgent:
 
             accepted_texts.append(line_text)
             new_lines.append(line)
-
-        if not new_lines:
-            return path, False
-
-        pieces = [part for part in [existing, "\n".join(new_lines)] if part]
-        path.write_text("\n\n".join(pieces) + "\n", encoding="utf-8")
-        return path, True
-
-    def extract_entry_lines(self, entry: str) -> list[str]:
-        return [line.strip() for line in entry.splitlines() if line.strip()]
+        return new_lines
 
     def entry_line_text(self, line: str) -> str:
+        if line.lstrip().startswith("#"):
+            return ""
         match = TODO_RE.match(line)
         if match:
             return match.group("text").strip()
-        if line.startswith("- ") and not line.startswith("- ["):
-            return line[2:].strip()
-        return line.strip()
+        normalized = line.lstrip()
+        if normalized.startswith("- ") and not normalized.startswith("- ["):
+            return normalized[2:].strip()
+        return normalized.strip()
+
+    def entry_timestamp_heading(self, now: dt.datetime | None = None) -> str:
+        current = now or dt.datetime.now()
+        return f"## {current.strftime('%H:%M')}"
 
     def open_todo_keys(self) -> set[str]:
         """Get normalized text for ALL todos (pending and completed)."""
@@ -109,22 +209,6 @@ class DiaryAgent:
                 match = TODO_RE.match(line)
                 if match:
                     keys.add(normalize_todo_text(match.group("text")))
-        return keys
-
-    def get_all_entry_keys(self, entry: str) -> set[str]:
-        """Extract normalized keys from an entry (both todos and regular notes)."""
-        keys: set[str] = set()
-        for line in entry.splitlines():
-            line = line.strip()
-            match = TODO_RE.match(line)
-            if match:
-                keys.add(normalize_todo_text(match.group("text")))
-            elif line.startswith("- ") and not line.startswith("- ["):
-                text = line[2:].strip()
-                if text:
-                    keys.add(normalize_todo_text(text))
-            elif line:
-                keys.add(normalize_todo_text(line))
         return keys
 
     def dedupe_entry(self, entry: str) -> str:
@@ -256,15 +340,15 @@ class DiaryAgent:
     def answer_query(self, query: str, matches: Sequence[tuple[Path, str, int]]) -> str:
         return llm.answer_query(model=self.model, query=query, matches=matches)
 
+    def suggest_section_tags(self, section: DiarySection, available_tags: Sequence[str]) -> list[str]:
+        return llm.suggest_section_tags(self.model, section.body, available_tags)
+
     def _todos_are_semantically_similar(self, candidate_text: str, existing_text: str) -> bool:
         return llm.todos_are_semantically_similar(
             model=self.model,
             candidate_text=candidate_text,
             existing_text=existing_text,
         )
-
-    def _require_ollama(self) -> None:
-        llm.require_ollama()
 
 
 def tokenize(text: str) -> list[str]:
@@ -341,10 +425,6 @@ def overlap_count(text: str, tokens: Sequence[str]) -> int:
     return core.overlap_count(text, tokens)
 
 
-def detect_todo_candidates(raw_update: str) -> list[str]:
-    return core.detect_todo_candidates(raw_update)
-
-
 def parse_explicit_day_input(day_text: str) -> str:
     normalized = day_text.strip()
     if not re.fullmatch(r"\d{2}_\d{2}_\d{4}", normalized):
@@ -352,6 +432,29 @@ def parse_explicit_day_input(day_text: str) -> str:
             "Invalid day format. Use dd_mm_yyyy, for example 05_03_2026."
         )
     return normalized
+
+
+def format_entry_title(day_text: str) -> str:
+    try:
+        parsed = dt.datetime.strptime(day_text, DATE_FMT)
+    except ValueError:
+        return day_text
+    return parsed.strftime("%d %b %Y")
+
+
+def build_entry_search_text(day_text: str, title: str) -> str:
+    variants = [
+        day_text.lower(),
+        day_text.replace("_", "").lower(),
+        day_text.replace("_", " ").lower(),
+        " ".join(reversed(day_text.split("_"))).lower(),
+        title.lower(),
+    ]
+    return " ".join(dict.fromkeys(variants))
+
+
+def resource_tags_for_specs(tags: Sequence[str]) -> list[str]:
+    return [tag.rsplit("/", 1)[-1].strip() for tag in tags if tag.strip()]
 
 
 def require_prompt_toolkit() -> None:
@@ -404,8 +507,16 @@ def confirm_similar_todo_addition_cli(match: SimilarTodoMatch) -> bool:
     return ui.confirm_similar_todo_addition_cli(match, stdin=sys.stdin)
 
 
-def launch_editor(initial_text: str = "") -> str:
-    return ui.launch_editor(initial_text)
+def launch_editor(
+    initial_text: str = "",
+    state: str = "Capturing update",
+    rewrite=None,
+) -> str:
+    return ui.launch_editor(initial_text, state=state, rewrite=rewrite)
+
+
+def prompt_for_section_tags(existing_tags: Sequence[str]) -> list[str]:
+    return ui.prompt_for_section_tags(existing_tags)
 
 
 def show_diary_entry(
@@ -413,42 +524,83 @@ def show_diary_entry(
     body: str,
     previous_entry=None,
     next_entry=None,
+    pick_entry=None,
 ) -> None:
     ui.show_diary_entry(
         title,
         body,
         previous_entry=previous_entry,
         next_entry=next_entry,
+        pick_entry=pick_entry,
     )
+
+
+def resolve_section(agent: DiaryAgent, day_text: str, time_text: str) -> DiarySection:
+    path = agent.file_for_day_input(day_text)
+    section = agent.section_for_id(f"{path.name}#{time_text}")
+    if section is None:
+        raise RuntimeError(f"No section found for {path.name} at {time_text}.")
+    return section
+
+
+def get_htfs_adapter(diary_dir: Path) -> HTFSAdapter:
+    adapter = HTFSAdapter(diary_dir)
+    adapter.ensure_initialized()
+    return adapter
 
 
 def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
     agent.ensure_storage()
-    update_text = raw_text if raw_text is not None else launch_editor()
-    if update_text.strip():
-        entry, skipped_matches = agent.review_entry_todos(
-            agent.synthesize_entry(update_text),
-            interactive=raw_text is None,
+    if raw_text is None:
+        final_entry = launch_editor(
+            state="Capturing update",
+            rewrite=lambda text: agent.prepare_rewrite_for_review(agent.synthesize_entry(text)),
         )
-        if entry:
-            path, appended = agent.append_entry(entry)
-            if appended:
-                print(f"Updated {path.name}")
-                print()
-                print(entry)
-            else:
-                print("This update has already been added.")
+        if not final_entry.strip():
+            print("No update captured.")
+            return 0
+
+        path, appended = agent.append_entry_verbatim(final_entry)
+        if appended:
+            adapter = get_htfs_adapter(agent.diary_dir)
+            section = agent.latest_section_for_file(path)
+            if section is not None:
+                selected_tags = prompt_for_section_tags(adapter.list_tags())
+                if selected_tags:
+                    adapter.add_tags(selected_tags)
+                    adapter.tag_section(section, resource_tags_for_specs(selected_tags))
+            print(f"Updated {path.name}")
+            print()
+            print(final_entry.rstrip())
+        else:
+            print("No update captured.")
+        return 0
+
+    update_text = raw_text
+    if not update_text.strip():
+        print("No update captured.")
+        return 0
+
+    entry, skipped_matches = agent.review_entry_todos(
+        agent.synthesize_entry(update_text),
+        interactive=False,
+    )
+    if entry:
+        path, appended = agent.append_entry(entry)
+        if appended:
+            print(f"Updated {path.name}")
+            print()
+            print(entry)
         else:
             print("This update has already been added.")
-        for match in skipped_matches:
-            print(
-                "Skipped similar TODO:"
-                f" {match.candidate_text} "
-                f"(matches {match.existing_task.file_path.name}:{match.existing_task.line_number})"
-            )
     else:
-        print("No update captured.")
-
+        print("This update has already been added.")
+    for match in skipped_matches:
+        print(
+            "Skipped similar TODO:"
+            f" {match.candidate_text} "
+            f"(matches {match.existing_task.file_path.name}:{match.existing_task.line_number})"
+        )
     return 0
 
 
@@ -485,10 +637,60 @@ def run_show_day(agent: DiaryAgent, day_text: str | None = None) -> int:
                 agent.diary_dir / current_title,
                 1,
             ),
+            pick_entry=lambda: agent.entry_options(),
         )
     except RuntimeError:
         print(f"[{path.name}]")
         print(body)
+    return 0
+
+
+def run_tags_show(agent: DiaryAgent, day_text: str, time_text: str) -> int:
+    section = resolve_section(agent, day_text, time_text)
+    adapter = get_htfs_adapter(agent.diary_dir)
+    tags = adapter.section_tags(section)
+    if not tags:
+        print(f"No HTFS tags found for {section.section_id}.")
+        return 0
+    print(f"[{section.section_id}]")
+    for tag in tags:
+        print(tag)
+    return 0
+
+
+def run_tags_apply(
+    agent: DiaryAgent,
+    day_text: str,
+    time_text: str,
+    tags: Sequence[str],
+) -> int:
+    section = resolve_section(agent, day_text, time_text)
+    adapter = get_htfs_adapter(agent.diary_dir)
+    adapter.add_tags(tags)
+    unsuccessful = adapter.tag_section(section, resource_tags_for_specs(tags))
+    if unsuccessful:
+        print("Some tags could not be applied:")
+        for tag in unsuccessful:
+            print(tag)
+        return 1
+    print(f"Tagged {section.section_id} with {', '.join(tags)}")
+    return 0
+
+
+def run_tags_suggest(agent: DiaryAgent, day_text: str, time_text: str) -> int:
+    section = resolve_section(agent, day_text, time_text)
+    adapter = get_htfs_adapter(agent.diary_dir)
+    available_tags = adapter.list_tags()
+    if not available_tags:
+        print("No HTFS tags are available to suggest from.")
+        return 0
+    suggestions = agent.suggest_section_tags(section, available_tags)
+    if not suggestions:
+        print(f"No tag suggestions for {section.section_id}.")
+        return 0
+    print(f"[{section.section_id}]")
+    for tag in suggestions:
+        print(tag)
     return 0
 
 
@@ -532,6 +734,34 @@ def build_parser() -> argparse.ArgumentParser:
         "todos",
         help="List and manage pending todos.",
     )
+
+    tags_parser = subparsers.add_parser(
+        "tags",
+        help="Show, apply, or suggest HTFS tags for a diary section.",
+    )
+    tags_subparsers = tags_parser.add_subparsers(dest="tags_command", required=True)
+
+    tags_show_parser = tags_subparsers.add_parser(
+        "show",
+        help="Show HTFS tags for a specific diary section.",
+    )
+    tags_show_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
+    tags_show_parser.add_argument("time", help="Section time in HH:MM format.")
+
+    tags_apply_parser = tags_subparsers.add_parser(
+        "apply",
+        help="Apply HTFS tags to a specific diary section.",
+    )
+    tags_apply_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
+    tags_apply_parser.add_argument("time", help="Section time in HH:MM format.")
+    tags_apply_parser.add_argument("tags", nargs="+", help="HTFS tags to apply.")
+
+    tags_suggest_parser = tags_subparsers.add_parser(
+        "suggest",
+        help="Suggest HTFS tags for a specific diary section using the configured model.",
+    )
+    tags_suggest_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
+    tags_suggest_parser.add_argument("time", help="Section time in HH:MM format.")
     return parser
 
 
@@ -554,6 +784,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_show_day(agent, day_text=args.day)
         if command == "todos":
             return run_todos(agent)
+        if command == "tags":
+            tags_command = args.tags_command
+            if tags_command == "show":
+                return run_tags_show(agent, args.day, args.time)
+            if tags_command == "apply":
+                return run_tags_apply(agent, args.day, args.time, args.tags)
+            if tags_command == "suggest":
+                return run_tags_suggest(agent, args.day, args.time)
         parser.error(f"Unknown command: {command}")
     except KeyboardInterrupt:
         print("\nAborted.")
