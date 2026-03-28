@@ -103,17 +103,31 @@ def confirm_similar_todo_addition_cli(match: SimilarTodoMatch, stdin=None) -> bo
 
 
 def launch_editor(initial_text: str = "") -> str:
-    require_prompt_toolkit()
-    session = PromptSession(multiline=True)
-    bindings = KeyBindings()
+    try:
+        require_prompt_toolkit()
+        session = PromptSession(multiline=True)
+        bindings = KeyBindings()
 
-    @bindings.add("c-d")
-    def _(event) -> None:
-        event.current_buffer.validate_and_handle()
+        @bindings.add("c-d")
+        def _(event) -> None:
+            event.current_buffer.validate_and_handle()
 
-    return session.prompt(
-        "Diary update> ",
-        default=initial_text,
-        key_bindings=bindings,
-        bottom_toolbar=lambda: status_toolbar("Capturing update"),
-    )
+        return session.prompt(
+            "Diary update> ",
+            default=initial_text,
+            key_bindings=bindings,
+            bottom_toolbar=lambda: status_toolbar("Capturing update"),
+        )
+    except RuntimeError:
+        # CLI fallback
+        print("Enter your diary update (Ctrl-D or empty line to finish):")
+        lines = []
+        while True:
+            try:
+                line = input()
+                if line == "":
+                    break
+                lines.append(line)
+            except EOFError:
+                break
+        return "\n".join(lines)

@@ -7,7 +7,7 @@ import argparse
 import datetime as dt
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import List, Sequence
 
 from diary_agent_app import core, llm, ui
 from diary_agent_app.models import AppConfig, PendingTask, SimilarTodoMatch
@@ -39,12 +39,60 @@ class DiaryAgent:
     def append_entry(self, entry: str) -> Path:
         path = self.today_file()
         existing = path.read_text(encoding="utf-8").rstrip() if path.exists() else ""
-        pieces = [part for part in [existing, entry.strip()] if part]
+        existing_keys = self.get_all_entry_keys(existing)
+        new_keys: set[str] = set()
+        
+        new_lines: list[str] = []
+        for line in entry.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            match = TODO_RE.match(line)
+            if match:
+                key = normalize_todo_text(match.group("text"))
+            elif line.startswith("- ") and not line.startswith("- ["):
+                key = normalize_todo_text(line[2:].strip())
+            else:
+                key = normalize_todo_text(line)
+            
+            if key in existing_keys or key in new_keys:
+                continue
+            new_keys.add(key)
+            new_lines.append(line)
+        
+        if not new_lines:
+            return path
+        
+        pieces = [part for part in [existing, "\n".join(new_lines)] if part]
         path.write_text("\n\n".join(pieces) + "\n", encoding="utf-8")
         return path
 
     def open_todo_keys(self) -> set[str]:
-        return {normalize_todo_text(task.text) for task in self.scan_pending_tasks()}
+        """Get normalized text for ALL todos (pending and completed)."""
+        keys: set[str] = set()
+        self.ensure_storage()
+        for file_path in self.diary_dir.glob("*.md"):
+            for line in file_path.read_text(encoding="utf-8").splitlines():
+                match = TODO_RE.match(line)
+                if match:
+                    keys.add(normalize_todo_text(match.group("text")))
+        return keys
+
+    def get_all_entry_keys(self, entry: str) -> set[str]:
+        """Extract normalized keys from an entry (both todos and regular notes)."""
+        keys: set[str] = set()
+        for line in entry.splitlines():
+            line = line.strip()
+            match = TODO_RE.match(line)
+            if match:
+                keys.add(normalize_todo_text(match.group("text")))
+            elif line.startswith("- ") and not line.startswith("- ["):
+                text = line[2:].strip()
+                if text:
+                    keys.add(normalize_todo_text(text))
+            elif line:
+                keys.add(normalize_todo_text(line))
+        return keys
 
     def dedupe_entry(self, entry: str) -> str:
         existing_todos = self.open_todo_keys()
@@ -332,8 +380,18 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
     else:
         print("No update captured.")
 
-    if raw_text is None and prompt_to_show_todos(agent):
-        prompt_for_task_completion(agent)
+    if raw_text is None:
+        try:
+            ui.require_prompt_toolkit()
+            if prompt_to_show_todos(agent):
+                prompt_for_task_completion(agent)
+        except RuntimeError:
+            # CLI fallback
+            tasks = agent.scan_pending_tasks()
+            if tasks:
+                response = input(f"You have {len(tasks)} pending task(s). Show them now? (y/N): ").strip().lower()
+                if response == 'y':
+                    run_todos(agent)
     return 0
 
 
@@ -375,6 +433,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Search diary history and ask the local model to answer a question.",
     )
     search_parser.add_argument("query", help="Natural-language query to search for.")
+
+    todos_parser = subparsers.add_parser(
+        "todos",
+        help="List and manage pending todos.",
+    )
     return parser
 
 
@@ -393,6 +456,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_capture(agent, raw_text=getattr(args, "text", None))
         if command == "search":
             return run_search(agent, query=args.query)
+        if command == "todos":
+            return run_todos(agent)
         parser.error(f"Unknown command: {command}")
     except KeyboardInterrupt:
         print("\nAborted.")
@@ -406,5 +471,47 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def run_todos(agent: DiaryAgent) -> int:
+    """Show all pending todos and allow marking them complete via CLI or GUI."""
+    agent.ensure_storage()
+    tasks = agent.scan_pending_tasks()
+    if not tasks:
+        print("No pending todos found.")
+        return 0
+
+    try:
+        ui.require_prompt_toolkit()
+        prompt_for_task_completion(agent)
+    except RuntimeError:
+        # Fall back to CLI if prompt_toolkit not available
+        print(f"Found {len(tasks)} pending todo(s):\n")
+        for i, task in enumerate(tasks, 1):
+            print(f"  {i}. {task.text}")
+            print(f"     [{task.file_path.name}:{task.line_number}]\n")
+
+        selected_indices = input("Enter numbers to mark complete (comma-separated), or press Enter to skip: ").strip()
+        if not selected_indices:
+            print("No tasks selected.")
+            return 0
+
+        try:
+            selected_nums = {int(n.strip()) for n in selected_indices.split(",") if n.strip()}
+            selected = [task for i, task in enumerate(tasks, 1) if i in selected_nums]
+        except ValueError:
+            print("Invalid input. No tasks updated.")
+            return 1
+
+        if not selected:
+            print("No valid tasks selected.")
+            return 0
+
+        updated = agent.mark_tasks_complete(selected)
+        print(f"Marked {updated} task(s) as complete.")
+
+    return 0
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
+
+

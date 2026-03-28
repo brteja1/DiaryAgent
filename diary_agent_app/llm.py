@@ -4,7 +4,6 @@ import datetime as dt
 from pathlib import Path
 from typing import Sequence
 
-from .core import detect_todo_candidates
 
 try:
     import ollama
@@ -34,7 +33,6 @@ def synthesize_entry(
     require_ollama()
 
     now = now or dt.datetime.now()
-    todo_hint = detect_todo_candidates(raw_update)
     context_excerpt = today_context[-4000:] if today_context else "(No existing notes today.)"
     messages = [
         {
@@ -43,18 +41,18 @@ def synthesize_entry(
                 "You are an offline diary assistant. Transform the user's informal update "
                 "into concise Markdown bullet points. Preserve factual details, fix grammar, "
                 "and keep continuity with the existing note if relevant. Use '- [ ] ...' "
-                "for actionable reminders or TODOs, and '- ...' for regular notes. Do not "
-                "repeat unresolved TODOs that already exist in the diary. Do not add "
-                "headings, preambles, or commentary."
+                "for actionable reminders or TODOs (items the user intends to do in the future), "
+                "and '- ...' for regular notes (observations, reflections, completed actions, "
+                "or information). Do not repeat unresolved TODOs that already exist in the diary. "
+                "Do not add headings, preambles, or commentary."
             ),
         },
         {
             "role": "user",
             "content": (
-                f"Timestamp: {now.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"Today's existing notes:\n{context_excerpt}\n\n"
-                f"Raw update:\n{raw_update.strip()}\n\n"
-                f"Potential TODO cues detected: {', '.join(todo_hint) if todo_hint else 'none'}"
+                "Timestamp: " + now.strftime('%Y-%m-%d %H:%M:%S') + "\n"
+                "Today's existing notes:\n" + context_excerpt + "\n\n"
+                "Raw update:\n" + raw_update.strip()
             ),
         },
     ]
@@ -126,3 +124,38 @@ def todos_are_semantically_similar(model: str, candidate_text: str, existing_tex
 
     verdict = response["message"]["content"].strip().upper()
     return verdict.startswith("YES")
+
+def classify_as_todo(model: str, text: str) -> bool | None:
+    """
+    Classify whether text represents an actionable TODO using LLM inference.
+    Returns True if it's a TODO, False if it's a regular note, None on error.
+    """
+    require_ollama()
+    try:
+        response = ollama.chat(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You classify text as either a TODO/actionable item or a regular note. "
+                        "TODOs are actionable tasks with clear intent to do something in the future. "
+                        "Regular notes are observations, reflections, completed actions, or information. "
+                        "Reply with exactly YES if this is a TODO, NO if it's a regular note."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": "Text to classify:\n" + text + "\n\nIs this a TODO/actionable item?",
+                },
+            ],
+        )
+    except Exception:
+        return None
+
+    verdict = response["message"]["content"].strip().upper()
+    if verdict.startswith("YES"):
+        return True
+    elif verdict.startswith("NO"):
+        return False
+    return None
