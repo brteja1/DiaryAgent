@@ -101,7 +101,12 @@ Behavior:
 - Opens a multiline terminal editor.
 - `Ctrl+D` submits the current note.
 - The note is polished into Markdown bullets using Ollama.
-- If TODOs already exist, the app can show them after capture and let you mark them complete.
+
+TODO review is handled separately through:
+
+```bash
+python diary_agent.py todos
+```
 
 ### Capture Notes Non-Interactively
 
@@ -122,6 +127,29 @@ Behavior:
 - The app retrieves relevant excerpts from diary files.
 - Ollama answers using only those excerpts.
 - Matching excerpts are printed after the answer.
+
+### Show A Day
+
+```bash
+python diary_agent.py show
+python diary_agent.py show "05_03_2026"
+```
+
+Behavior:
+
+- With no argument, `show` opens today's diary entry.
+- If a day is provided, it must use `dd_mm_yyyy` format.
+- Any other format is rejected with an error.
+- The matching diary entry is shown exactly as stored.
+- If `prompt_toolkit` is available, the entry opens in a scrollable terminal viewer.
+- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, and exits with `q`, `Esc`, or `Ctrl+C`.
+- If `prompt_toolkit` is unavailable, the stored entry is printed to stdout.
+
+### Show A Specific Day
+
+```bash
+python diary_agent.py show "05_03_2026"
+```
 
 ### Override Configured Model
 

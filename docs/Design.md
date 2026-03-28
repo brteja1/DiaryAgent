@@ -16,8 +16,9 @@ The implementation lives in [diary_agent.py](/linuxdev/code_snippets/diary_agent
 - Use a local terminal workflow without requiring a GUI application.
 - Preserve diary continuity by conditioning new note generation on today's existing file.
 - Keep TODO handling persistent across all diary files, not just the current day.
-- Reduce accidental TODO duplication with both deterministic filtering and LLM-backed similarity checks.
+- Reduce accidental TODO duplication with deterministic filtering, semantic similarity checks, and LLM-based TODO classification.
 - Degrade clearly when dependencies or local model connectivity are missing.
+- Work with or without prompt_toolkit (CLI fallbacks for both editor and TODO prompts).
 
 ## High-Level Architecture
 
@@ -37,7 +38,7 @@ The diary path is not derived from the project directory. Instead, startup requi
 
 - `~/.config/diary_agent/config.txt`
 
-Current supported config entry:
+Current supported config entries:
 
 - `diary_path=/path/to/Diary`
 - `llm_model=model_name_available_in_ollama`
@@ -61,6 +62,7 @@ Properties:
 - The directory is created lazily on demand.
 - The current day's file is created only when something is appended.
 - Existing content is preserved and new entries are appended with blank-line separation.
+- Duplicate entries (both TODOs and regular notes) are filtered out before appending.
 
 The system treats all `*.md` files in the configured diary directory as part of history for TODO scanning and search.
 
@@ -81,18 +83,30 @@ These objects are deliberately narrow and map directly to operational workflows.
 
 The capture path is the default CLI behavior.
 
-### Interactive Path
+### Interactive Path (with prompt_toolkit)
 
 1. Resolve config.
 2. Ensure the diary storage directory exists.
 3. Open a multiline `prompt_toolkit` editor.
 4. Submit the current buffer with `Ctrl+D`.
 5. Send the raw text to Ollama for Markdown bullet generation.
-6. Remove duplicate TODOs deterministically.
+6. Remove duplicate entries deterministically (both TODOs and regular notes).
 7. Review semantically similar TODOs against unresolved historical tasks.
 8. Append the surviving entry to today's file.
 9. If open TODOs exist, ask whether the user wants to see them.
 10. If the user says yes, open the TODO checklist and allow completion updates.
+
+### CLI Fallback Path (without prompt_toolkit)
+
+1. Resolve config.
+2. Ensure the diary storage directory exists.
+3. Prompt for input via stdin (empty line or Ctrl-D to finish).
+4. Send the raw text to Ollama for Markdown bullet generation.
+5. Remove duplicate entries deterministically.
+6. Review semantically similar TODOs against unresolved historical tasks.
+7. Append the surviving entry to today's file.
+8. If open TODOs exist, prompt `y/N` to show them.
+9. If yes, show numbered list and allow selecting to mark complete.
 
 ### Non-Interactive Path
 
@@ -100,7 +114,7 @@ The `capture --text "..."` path skips the editor and uses the provided text as i
 
 ## LLM Integration
 
-The system uses Ollama for three separate tasks.
+The system uses Ollama for four separate tasks.
 
 Model selection comes from the config file by default, with `--model` available as an explicit runtime override.
 
@@ -111,27 +125,31 @@ Input:
 - timestamp
 - today's existing diary context
 - raw user update
-- lightweight TODO intent hints
 
 Output:
 
 - concise Markdown bullet points
 
-The prompt tells the model to:
+The prompt instructs the LLM to:
 
 - preserve factual content
 - keep continuity with today's notes
+- decide semantically whether items are TODOs or regular notes
 - format actionable items as TODO checkboxes
 - avoid headings or commentary
 - avoid repeating unresolved TODOs already in the diary
 
-### 2. TODO Similarity Decision
+### 2. TODO Classification
+
+For programmatic classification needs, the `classify_as_todo()` function uses LLM inference to determine whether text represents an actionable TODO or a regular note. Returns `YES` or `NO`.
+
+### 3. TODO Similarity Decision
 
 For each candidate unchecked TODO that survives exact dedupe, the system can ask Ollama whether it is effectively the same unresolved task as an existing open TODO. The model is instructed to answer only `YES` or `NO`.
 
 This is used as a second-stage filter after lexical shortlisting.
 
-### 3. History Answer Synthesis
+### 4. History Answer Synthesis
 
 For natural-language search, the system retrieves candidate text excerpts first and only then asks Ollama to answer based on those excerpts.
 
@@ -154,111 +172,35 @@ Completed TODOs are recognized by:
 ### Completion Flow
 
 - The system scans all configured diary Markdown files.
-- It displays open TODOs in a `prompt_toolkit` checkbox dialog.
+- It displays open TODOs in a `prompt_toolkit` checkbox dialog (or numbered list in CLI fallback).
 - Selected TODOs are updated in place in their source files.
+
+### CLI Subcommand
+
+The `todos` subcommand provides dedicated TODO management:
+
+```
+python diary_agent.py todos
+```
+
+Uses the shared `prompt_for_task_completion` function from the dedicated `todos` command, ensuring consistent behavior.
 
 ### Duplicate Prevention
 
-There are two layers:
+There are multiple layers of deduplication:
 
-1. Exact and near-exact dedupe
-   - normalizes text by tokenization and removes repeats against existing open TODOs and repeats within the same generated entry
-2. Semantic dedupe
-   - uses a lexical shortlist plus an Ollama yes/no similarity decision
-   - requires user confirmation before adding a semantically similar TODO in interactive flows
+1. Entry-level dedupe
+   - All entries (TODOs + regular notes) are checked against existing content
+   - Uses normalized text comparison via `normalize_todo_text()`
+   - Also filters duplicates within the new entry itself
 
-This hybrid approach keeps the deterministic path fast while reserving model calls for ambiguous cases.
+2. Completed TODO tracking
+   - `open_todo_keys()` checks ALL todos (pending + completed)
+   - Prevents re-adding completed todos as new
 
-## Search Design
+3. Exact and near-exact dedupe
+   - normalizes text by tokenization and removes repeats against existing open TODOs
 
-Search is intentionally lightweight.
-
-### Retrieval
-
-- Tokenize the user query.
-- Scan all Markdown files in the configured diary directory.
-- Split file content into paragraph-like chunks.
-- Score chunks using substring hits and token overlap.
-- Keep the top-ranked excerpts.
-
-### Answering
-
-- Provide the top excerpts to Ollama.
-- Ask for a concise answer grounded only in those excerpts.
-- Print the synthesized answer and the matched excerpts.
-
-This is simpler than embedding-based retrieval, but adequate for a local-first, dependency-light design.
-
-## Terminal UI Design
-
-The UI is built with `prompt_toolkit`.
-
-### Editor
-
-- multiline buffer
-- status toolbar with date/time and state
-- explicit `Ctrl+D` binding for submission
-
-### Dialogs
-
-- TODO checklist
-- post-capture yes/no TODO prompt
-- similar-TODO confirmation
-- completion confirmation
-
-Dialogs use a custom black-background style instead of the prompt_toolkit default dialog theme.
-
-## Error Handling Strategy
-
-The CLI treats dependency and environment failures as runtime errors with explicit user-facing messages.
-
-Examples:
-
-- missing `ollama` Python package
-- missing `prompt_toolkit` Python package
-- Ollama service not reachable
-- configured model unavailable
-- missing/invalid config in non-interactive mode
-
-Keyboard interrupt is handled separately and exits cleanly.
-
-## Tradeoffs
-
-### Why A Single-File Implementation
-
-- simpler distribution
-- fewer moving parts for a local utility
-- faster iteration while requirements are still evolving
-
-The downside is growing file size and tighter coupling between UI, storage, and model logic.
-
-### Why Lexical Retrieval Instead Of Embeddings
-
-- no extra infrastructure
-- no vector store dependency
-- easier offline/local operation
-
-The downside is weaker recall for semantically distant phrasing.
-
-### Why Use Ollama For TODO Similarity
-
-- catches paraphrased duplicates better than normalization alone
-- aligns with the local-model-first architecture
-
-The downside is additional model calls and dependency on local model quality.
-
-## Current Limitations
-
-- The project is implemented in one module, so future growth may justify splitting into config, UI, search, and model modules.
-- Search quality depends on lexical retrieval before synthesis.
-- Semantic duplicate detection depends on local model availability and judgment quality.
-- Terminal rendering still depends on the user terminal dimensions and capabilities.
-
-## Future Refactoring Directions
-
-- split the code into dedicated modules
-- add automated tests around config, TODO scanning, and duplicate filtering
-- support richer config entries such as model name and UI preferences
-- support richer config entries beyond the current `diary_path` and `llm_model`
-- add search caching or more advanced retrieval
-- add structured logging for operational troubleshooting
+4. Semantic similarity check
+   - LLM-backed check for semantically similar TODOs
+   - Prompts user (interactive) or skips (non-interactive)

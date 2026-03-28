@@ -6,12 +6,25 @@ import sys
 from .models import SimilarTodoMatch
 
 try:
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.layout import HSplit, Layout
+    from prompt_toolkit.layout.containers import Window
+    from prompt_toolkit.layout.controls import FormattedTextControl
+    from prompt_toolkit.widgets import Box, Frame, TextArea
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.shortcuts import button_dialog, checkboxlist_dialog, message_dialog
     from prompt_toolkit.styles import Style
 except ImportError:  # pragma: no cover - runtime dependency
+    Application = None
+    HSplit = None
+    Layout = None
+    Window = None
+    FormattedTextControl = None
+    Box = None
+    Frame = None
+    TextArea = None
     PromptSession = None
     HTML = None
     KeyBindings = None
@@ -45,8 +58,16 @@ DIALOG_STYLE = (
 def require_prompt_toolkit() -> None:
     if (
         PromptSession is None
+        or Application is None
+        or HSplit is None
+        or Layout is None
         or HTML is None
         or KeyBindings is None
+        or Window is None
+        or FormattedTextControl is None
+        or Box is None
+        or Frame is None
+        or TextArea is None
         or button_dialog is None
         or checkboxlist_dialog is None
         or Style is None
@@ -131,3 +152,77 @@ def launch_editor(initial_text: str = "") -> str:
             except EOFError:
                 break
         return "\n".join(lines)
+
+
+def show_diary_entry(
+    title: str,
+    body: str,
+    previous_entry=None,
+    next_entry=None,
+) -> None:
+    require_prompt_toolkit()
+
+    text_area = TextArea(
+        text=body,
+        read_only=True,
+        scrollbar=True,
+        focusable=True,
+        wrap_lines=False,
+    )
+    help_bar = Window(
+        height=1,
+        content=FormattedTextControl(
+            HTML(
+                "<b>Browse:</b> Arrow keys / PageUp / PageDown  "
+                "<b>Jump:</b> [ / ]  "
+                "<b>Exit:</b> q, Esc, Ctrl+C"
+            )
+        ),
+    )
+
+    frame = Frame(text_area, title=title)
+
+    bindings = KeyBindings()
+
+    @bindings.add("q")
+    @bindings.add("escape")
+    @bindings.add("c-c")
+    def _(event) -> None:
+        event.app.exit()
+
+    def move_to_entry(loader) -> None:
+        if loader is None:
+            return
+        target = loader(frame.title)
+        if target is None:
+            return
+        next_title, next_body = target
+        frame.title = next_title
+        text_area.text = next_body
+        text_area.buffer.cursor_position = 0
+
+    @bindings.add("[")
+    def _(event) -> None:
+        move_to_entry(previous_entry)
+
+    @bindings.add("]")
+    def _(event) -> None:
+        move_to_entry(next_entry)
+
+    root = Box(
+        body=HSplit(
+            [
+                frame,
+                help_bar,
+            ]
+        ),
+        padding=1,
+    )
+
+    app = Application(
+        layout=Layout(root, focused_element=text_area),
+        key_bindings=bindings,
+        full_screen=True,
+        style=DIALOG_STYLE,
+    )
+    app.run()

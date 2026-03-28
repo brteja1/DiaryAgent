@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import re
 import sys
 from pathlib import Path
 from typing import List, Sequence
@@ -36,36 +37,68 @@ class DiaryAgent:
             return ""
         return path.read_text(encoding="utf-8").strip()
 
-    def append_entry(self, entry: str) -> Path:
+    def file_for_day_input(self, day_text: str) -> Path:
+        normalized_date = parse_explicit_day_input(day_text)
+        return self.diary_dir / f"{normalized_date}.md"
+
+    def diary_files(self) -> list[Path]:
+        return sorted(self.diary_dir.glob("*.md"))
+
+    def adjacent_entry(self, current_path: Path, step: int) -> tuple[str, str] | None:
+        files = self.diary_files()
+        try:
+            index = files.index(current_path)
+        except ValueError:
+            return None
+
+        next_index = index + step
+        if next_index < 0 or next_index >= len(files):
+            return None
+
+        target = files[next_index]
+        return target.name, target.read_text(encoding="utf-8").rstrip()
+
+    def append_entry(self, entry: str) -> tuple[Path, bool]:
         path = self.today_file()
         existing = path.read_text(encoding="utf-8").rstrip() if path.exists() else ""
-        existing_keys = self.get_all_entry_keys(existing)
-        new_keys: set[str] = set()
-        
+        existing_lines = self.extract_entry_lines(existing)
+        existing_texts = [self.entry_line_text(line) for line in existing_lines]
+        accepted_texts: list[str] = []
         new_lines: list[str] = []
         for line in entry.strip().splitlines():
             line = line.strip()
             if not line:
                 continue
-            match = TODO_RE.match(line)
-            if match:
-                key = normalize_todo_text(match.group("text"))
-            elif line.startswith("- ") and not line.startswith("- ["):
-                key = normalize_todo_text(line[2:].strip())
-            else:
-                key = normalize_todo_text(line)
-            
-            if key in existing_keys or key in new_keys:
+
+            line_text = self.entry_line_text(line)
+            if not line_text:
                 continue
-            new_keys.add(key)
+
+            if any(lines_are_redundant(line_text, text) for text in existing_texts):
+                continue
+            if any(lines_are_redundant(line_text, text) for text in accepted_texts):
+                continue
+
+            accepted_texts.append(line_text)
             new_lines.append(line)
-        
+
         if not new_lines:
-            return path
-        
+            return path, False
+
         pieces = [part for part in [existing, "\n".join(new_lines)] if part]
         path.write_text("\n\n".join(pieces) + "\n", encoding="utf-8")
-        return path
+        return path, True
+
+    def extract_entry_lines(self, entry: str) -> list[str]:
+        return [line.strip() for line in entry.splitlines() if line.strip()]
+
+    def entry_line_text(self, line: str) -> str:
+        match = TODO_RE.match(line)
+        if match:
+            return match.group("text").strip()
+        if line.startswith("- ") and not line.startswith("- ["):
+            return line[2:].strip()
+        return line.strip()
 
     def open_todo_keys(self) -> set[str]:
         """Get normalized text for ALL todos (pending and completed)."""
@@ -242,6 +275,34 @@ def normalize_todo_text(text: str) -> str:
     return core.normalize_todo_text(text)
 
 
+def lines_are_redundant(first: str, second: str) -> bool:
+    first_key = normalize_todo_text(first)
+    second_key = normalize_todo_text(second)
+    if not first_key or not second_key:
+        return False
+    if first_key == second_key:
+        return True
+
+    first_tokens = first_key.split()
+    second_tokens = second_key.split()
+    if min(len(first_tokens), len(second_tokens)) < 4:
+        return False
+
+    first_words = set(first_tokens)
+    second_words = set(second_tokens)
+    overlap = len(first_words & second_words)
+    shorter = min(len(first_words), len(second_words))
+    if shorter == 0:
+        return False
+
+    overlap_ratio = overlap / shorter
+    return (
+        first_key in second_key
+        or second_key in first_key
+        or overlap_ratio >= 0.8
+    )
+
+
 def config_file_path() -> Path:
     return core.config_file_path(home=Path.home())
 
@@ -282,6 +343,15 @@ def overlap_count(text: str, tokens: Sequence[str]) -> int:
 
 def detect_todo_candidates(raw_update: str) -> list[str]:
     return core.detect_todo_candidates(raw_update)
+
+
+def parse_explicit_day_input(day_text: str) -> str:
+    normalized = day_text.strip()
+    if not re.fullmatch(r"\d{2}_\d{2}_\d{4}", normalized):
+        raise RuntimeError(
+            "Invalid day format. Use dd_mm_yyyy, for example 05_03_2026."
+        )
+    return normalized
 
 
 def require_prompt_toolkit() -> None:
@@ -326,24 +396,6 @@ def prompt_for_task_completion(agent: DiaryAgent) -> None:
     ).run()
 
 
-def prompt_to_show_todos(agent: DiaryAgent) -> bool:
-    ui.require_prompt_toolkit()
-    pending_count = len(agent.scan_pending_tasks())
-    if pending_count == 0:
-        return False
-
-    result = ui.button_dialog(
-        title="Pending TODOs",
-        text=f"You have {pending_count} pending task(s). Show them now?",
-        buttons=[
-            ("Yes", True),
-            ("No", False),
-        ],
-        style=DIALOG_STYLE,
-    ).run()
-    return bool(result)
-
-
 def confirm_similar_todo_addition(match: SimilarTodoMatch) -> bool:
     return ui.confirm_similar_todo_addition(match)
 
@@ -356,6 +408,20 @@ def launch_editor(initial_text: str = "") -> str:
     return ui.launch_editor(initial_text)
 
 
+def show_diary_entry(
+    title: str,
+    body: str,
+    previous_entry=None,
+    next_entry=None,
+) -> None:
+    ui.show_diary_entry(
+        title,
+        body,
+        previous_entry=previous_entry,
+        next_entry=next_entry,
+    )
+
+
 def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
     agent.ensure_storage()
     update_text = raw_text if raw_text is not None else launch_editor()
@@ -365,12 +431,15 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
             interactive=raw_text is None,
         )
         if entry:
-            path = agent.append_entry(entry)
-            print(f"Updated {path.name}")
-            print()
-            print(entry)
+            path, appended = agent.append_entry(entry)
+            if appended:
+                print(f"Updated {path.name}")
+                print()
+                print(entry)
+            else:
+                print("This update has already been added.")
         else:
-            print("No new diary content to append.")
+            print("This update has already been added.")
         for match in skipped_matches:
             print(
                 "Skipped similar TODO:"
@@ -380,18 +449,6 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
     else:
         print("No update captured.")
 
-    if raw_text is None:
-        try:
-            ui.require_prompt_toolkit()
-            if prompt_to_show_todos(agent):
-                prompt_for_task_completion(agent)
-        except RuntimeError:
-            # CLI fallback
-            tasks = agent.scan_pending_tasks()
-            if tasks:
-                response = input(f"You have {len(tasks)} pending task(s). Show them now? (y/N): ").strip().lower()
-                if response == 'y':
-                    run_todos(agent)
     return 0
 
 
@@ -405,6 +462,33 @@ def run_search(agent: DiaryAgent, query: str) -> int:
         for path, snippet, _score in matches:
             print(f"\n[{path.name}]")
             print(snippet)
+    return 0
+
+
+def run_show_day(agent: DiaryAgent, day_text: str | None = None) -> int:
+    agent.ensure_storage()
+    path = agent.today_file() if day_text is None else agent.file_for_day_input(day_text)
+    if not path.exists():
+        print(f"No diary entry found for {path.stem}.")
+        return 0
+
+    body = path.read_text(encoding="utf-8").rstrip()
+    try:
+        show_diary_entry(
+            path.name,
+            body,
+            previous_entry=lambda current_title: agent.adjacent_entry(
+                agent.diary_dir / current_title,
+                -1,
+            ),
+            next_entry=lambda current_title: agent.adjacent_entry(
+                agent.diary_dir / current_title,
+                1,
+            ),
+        )
+    except RuntimeError:
+        print(f"[{path.name}]")
+        print(body)
     return 0
 
 
@@ -434,6 +518,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     search_parser.add_argument("query", help="Natural-language query to search for.")
 
+    show_parser = subparsers.add_parser(
+        "show",
+        help="Show the diary entry for a particular day.",
+    )
+    show_parser.add_argument(
+        "day",
+        nargs="?",
+        help="Day in dd_mm_yyyy format, for example 05_03_2026.",
+    )
+
     todos_parser = subparsers.add_parser(
         "todos",
         help="List and manage pending todos.",
@@ -456,6 +550,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_capture(agent, raw_text=getattr(args, "text", None))
         if command == "search":
             return run_search(agent, query=args.query)
+        if command == "show":
+            return run_show_day(agent, day_text=args.day)
         if command == "todos":
             return run_todos(agent)
         parser.error(f"Unknown command: {command}")
@@ -513,5 +609,3 @@ def run_todos(agent: DiaryAgent) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

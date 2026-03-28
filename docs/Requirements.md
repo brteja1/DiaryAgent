@@ -6,12 +6,13 @@ This file describes the current implemented behavior of the diary agent in this 
 
 - Implementation language: Python.
 - Main entry point: `diary_agent.py`.
-- Local model integration: uses the Python `ollama` client for text generation, history-answer synthesis, and semantic TODO similarity checks.
-- Terminal UI: uses `prompt_toolkit` for multiline input and dialog-based prompts.
+- Local model integration: uses the Python `ollama` client for text generation, history-answer synthesis, semantic TODO classification, and semantic TODO similarity checks.
+- Terminal UI: uses `prompt_toolkit` for multiline input and dialog-based prompts (optional - CLI fallbacks available).
 - Expected runtime environment:
   - Ollama must be installed and reachable from the machine running the script.
   - The configured model must already be available in Ollama.
-  - `prompt_toolkit` and `ollama` Python packages must be installed.
+  - `ollama` Python package must be installed.
+  - `prompt_toolkit` Python package is optional (CLI fallbacks used if unavailable).
   - A user config file at `~/.config/diary_agent/config.txt` is required for normal operation.
 
 ## Model Behavior
@@ -44,22 +45,23 @@ This file describes the current implemented behavior of the diary agent in this 
 ## Capture Workflow
 
 - Default command behavior is capture mode.
-- Interactive capture flow:
+- Interactive capture flow (with prompt_toolkit):
   - Opens a multiline `prompt_toolkit` editor first.
   - Supports standard text entry, cursor movement, backspace, and multiline input.
   - Shows a bottom status toolbar with date/time and current state.
   - `Ctrl+D` explicitly submits the current buffer.
-- If the submitted update is empty:
-  - The program reports that no update was captured.
-  - The TODO follow-up prompt can still appear afterward.
+- CLI fallback capture flow (without prompt_toolkit):
+  - Prompts for input via stdin.
+  - Empty line or Ctrl-D finishes input.
 - Non-interactive capture is supported through:
   - `python diary_agent.py capture --text "..."`.
 
 ## Diary Formatting
 
 - Raw informal updates are sent to Ollama and converted into concise Markdown bullets.
+- The LLM decides semantically whether items are TODOs or regular notes.
 - Regular notes are generated as `- ...`.
-- Action-oriented reminders and TODO-like text are encouraged as `- [ ] ...`.
+- Action-oriented reminders and TODO-like text are generated as `- [ ] ...`.
 - The generation prompt instructs the model not to repeat unresolved TODOs already present in the diary.
 
 ## TODO Management
@@ -69,21 +71,23 @@ This file describes the current implemented behavior of the diary agent in this 
 - TODO review flow now happens after note capture, not before it.
 - After capture, if pending TODOs exist, the user is asked whether to show them.
 - The TODO checklist screen opens only if the user chooses yes.
+- CLI fallback (without prompt_toolkit): shows pending count and prompts `y/N` to show them.
 
-## TODO UI Behavior
+## TODO CLI Command
 
-- TODO dialogs use a black-background custom style instead of the default blue prompt_toolkit dialog look.
-- The checklist action buttons currently use:
-  - `Complete`
-  - `Skip`
-- The initial yes/no prompt for showing TODOs currently uses:
-  - `Yes`
-  - `No`
+- Dedicated subcommand for viewing/managing todos:
+  - `python diary_agent.py todos`
+- Lists all pending todos with their source file and line number.
+- Allows selecting todos to mark complete by entering numbers.
+- Uses the shared checklist UI in the dedicated `todos` command (`prompt_for_task_completion`).
 
-## Duplicate TODO Protection
+## Duplicate Entry Protection
 
-- Exact or near-exact TODO duplicates are removed before appending by normalized-text comparison.
-- Duplicate TODOs within the same newly generated entry are also removed.
+- All entries (both TODOs and regular notes) are deduplicated against:
+  - Existing entries in today's file
+  - Entries within the new content itself
+- Uses normalized text comparison (tokenized and lowercased).
+- Exact or near-exact TODO duplicates are removed before appending.
 - If all generated content is redundant after filtering, the program reports that there is no new diary content to append.
 
 ## Semantic TODO Similarity Check
@@ -108,7 +112,8 @@ This file describes the current implemented behavior of the diary agent in this 
 
 ## Error Handling
 
-- If `ollama` or `prompt_toolkit` Python packages are missing, the script exits with a clear runtime error.
+- If `ollama` Python package is missing, the script exits with a clear runtime error.
+- If `prompt_toolkit` is missing, CLI fallbacks are used automatically.
 - If Ollama is not reachable or the configured model is unavailable, the script exits with a clear runtime error.
 - Keyboard interrupt is handled gracefully.
 
@@ -133,6 +138,6 @@ llm_model=llama3
 
 ## Current Known Constraints
 
-- Semantic TODO similarity depends on Ollama availability and model quality.
+- Semantic TODO classification depends on Ollama availability and model quality.
 - The search retrieval step uses lightweight lexical scoring before model synthesis; it is not embedding-based retrieval.
 - Terminal dialog rendering still depends on the user's terminal size and capabilities, though the styling and button labels have been improved.
