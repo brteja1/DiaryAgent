@@ -394,6 +394,12 @@ def test_run_tags_show_prints_section_tags(monkeypatch, tmp_path, capsys):
         def section_tags(self, section):
             return ["Project/DiaryAgent", "Topic/Retrieval"]
 
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
+            return []
+
     monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
 
     exit_code = diary_agent.run_tags_show(agent, "26_03_2026", "14:30")
@@ -420,6 +426,12 @@ def test_run_tags_apply_creates_and_applies_tags(monkeypatch, tmp_path, capsys):
         def tag_section(self, section, tags):
             recorded["section_id"] = section.section_id
             recorded["tagged"] = list(tags)
+            return []
+
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
             return []
 
     monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
@@ -456,6 +468,12 @@ def test_run_tags_suggest_uses_available_htfs_tags(monkeypatch, tmp_path, capsys
         def list_tags(self):
             return ["Project/DiaryAgent", "Topic/Retrieval"]
 
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
+            return []
+
     monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
 
     exit_code = diary_agent.run_tags_suggest(agent, "26_03_2026", "14:30")
@@ -487,15 +505,15 @@ def test_run_capture_interactive_exposes_rewrite_callback_and_saves_final_edit_v
 
     editor_calls = []
 
-    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None):
+    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
         rewritten = rewrite("raw update") if rewrite is not None else initial_text
         editor_calls.append((initial_text, state, rewritten))
-        return "- Final edited note\n\n### keep this heading"
+        return "- Final edited note\n\n### keep this heading", []
 
     monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
     monkeypatch.setattr(agent, "synthesize_entry", lambda text: "- Rewritten note")
     monkeypatch.setattr(agent, "prepare_rewrite_for_review", lambda entry: entry)
-    monkeypatch.setattr(diary_agent, "prompt_for_section_tags", lambda _tags: [])
+    monkeypatch.setattr(diary_agent, "prompt_for_section_tags", lambda *args, **kwargs: [])
 
     class FakeAdapter:
         def list_tags(self):
@@ -505,6 +523,12 @@ def test_run_capture_interactive_exposes_rewrite_callback_and_saves_final_edit_v
             return []
 
         def tag_section(self, section, tags):
+            return []
+
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
             return []
 
     monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
@@ -540,14 +564,14 @@ def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_dra
 
     editor_calls = []
 
-    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None):
+    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
         rewritten = rewrite("raw update") if rewrite is not None else initial_text
         editor_calls.append((initial_text, state, rewritten))
-        return "- New note"
+        return "- New note", []
 
     monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
     monkeypatch.setattr(agent, "synthesize_entry", lambda text: "- Existing note\n- New note")
-    monkeypatch.setattr(diary_agent, "prompt_for_section_tags", lambda _tags: [])
+    monkeypatch.setattr(diary_agent, "prompt_for_section_tags", lambda *args, **kwargs: [])
 
     class FakeAdapter:
         def list_tags(self):
@@ -557,6 +581,12 @@ def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_dra
             return []
 
         def tag_section(self, section, tags):
+            return []
+
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
             return []
 
     monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
@@ -578,18 +608,24 @@ def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_dra
 def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, tmp_path):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
     monkeypatch.setattr(agent, "ensure_storage", lambda: None)
-    monkeypatch.setattr(
-        diary_agent,
-        "launch_editor",
-        lambda initial_text="", state="Capturing update", rewrite=None: "- Final edited note",
-    )
+    
+    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+        suggested = suggest_tags("- Final edited note") if suggest_tags else []
+        return "- Final edited note", suggested
+
+    monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
     section = diary_agent.DiarySection(tmp_path / "26_03_2026.md", "14:30", "- Final edited note")
     monkeypatch.setattr(agent, "append_entry_verbatim", lambda entry: (tmp_path / "26_03_2026.md", True))
     monkeypatch.setattr(agent, "latest_section_for_file", lambda _path: section)
     prompted = {}
 
-    def fake_prompt_for_section_tags(tags):
-        prompted["existing"] = list(tags)
+    monkeypatch.setattr(agent, "suggest_tags_for_text", lambda text, all_tags: ["Topic/Retrieval"])
+
+    def fake_prompt_for_section_tags(all_tags, top_level_tags, all_paths, suggested_tags=[]):
+        prompted["all_tags"] = list(all_tags)
+        prompted["top_level"] = list(top_level_tags)
+        prompted["all_paths"] = list(all_paths)
+        prompted["suggested"] = list(suggested_tags)
         return ["Project/DiaryAgent"]
 
     monkeypatch.setattr(diary_agent, "prompt_for_section_tags", fake_prompt_for_section_tags)
@@ -597,6 +633,12 @@ def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, 
 
     class FakeAdapter:
         def list_tags(self):
+            return ["Project/DiaryAgent", "Topic/Retrieval"]
+
+        def get_top_level_tags(self):
+            return ["Project", "Topic"]
+
+        def get_all_tag_paths(self):
             return ["Project/DiaryAgent", "Topic/Retrieval"]
 
         def add_tags(self, tags):
@@ -613,7 +655,12 @@ def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, 
     exit_code = diary_agent.run_capture(agent)
 
     assert exit_code == 0
-    assert prompted == {"existing": ["Project/DiaryAgent", "Topic/Retrieval"]}
+    assert prompted == {
+        "all_tags": ["Project/DiaryAgent", "Topic/Retrieval"],
+        "top_level": ["Project", "Topic"],
+        "all_paths": ["Project/DiaryAgent", "Topic/Retrieval"],
+        "suggested": ["Topic/Retrieval"],
+    }
     assert recorded == {
         "added": ["Project/DiaryAgent"],
         "section_id": "26_03_2026.md#14:30",
@@ -934,3 +981,41 @@ def test_build_parser_accepts_show_without_day():
 
     assert args.command == "show"
     assert args.day is None
+
+def test_run_tags_show_prints_all_sections_tags_when_time_is_none(monkeypatch, tmp_path, capsys):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    day_file = tmp_path / "26_03_2026.md"
+    day_file.write_text("## 10:00\n- first note\n## 14:30\n- second note", encoding="utf-8")
+    
+    class FakeAdapter:
+        def section_tags(self, section):
+            if section.heading == "10:00":
+                return ["Topic/Personal"]
+            if section.heading == "14:30":
+                return ["Project/DiaryAgent"]
+            return []
+
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
+            return []
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+
+    exit_code = diary_agent.run_tags_show(agent, "26_03_2026", None)
+
+    assert exit_code == 0
+    captured = capsys.readouterr().out
+    assert "[26_03_2026.md#10:00]" in captured
+    assert "  Topic/Personal" in captured
+    assert "[26_03_2026.md#14:30]" in captured
+    assert "  Project/DiaryAgent" in captured
+
+def test_build_parser_accepts_tags_show_without_time():
+    parser = diary_agent.build_parser()
+    args = parser.parse_args(["tags", "show", "26_03_2026"])
+    assert args.command == "tags"
+    assert args.tags_command == "show"
+    assert args.day == "26_03_2026"
+    assert args.time is None

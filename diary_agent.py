@@ -343,6 +343,11 @@ class DiaryAgent:
     def suggest_section_tags(self, section: DiarySection, available_tags: Sequence[str]) -> list[str]:
         return llm.suggest_section_tags(self.model, section.body, available_tags)
 
+    def suggest_tags_for_text(self, text: str, available_tags: Sequence[str]) -> list[str]:
+        if not self.model:
+            return []
+        return llm.suggest_section_tags(self.model, text, available_tags)
+
     def _todos_are_semantically_similar(self, candidate_text: str, existing_text: str) -> bool:
         return llm.todos_are_semantically_similar(
             model=self.model,
@@ -511,12 +516,18 @@ def launch_editor(
     initial_text: str = "",
     state: str = "Capturing update",
     rewrite=None,
-) -> str:
-    return ui.launch_editor(initial_text, state=state, rewrite=rewrite)
+    suggest_tags=None,
+) -> tuple[str, list[str]]:
+    return ui.launch_editor(initial_text, state=state, rewrite=rewrite, suggest_tags=suggest_tags)
 
 
-def prompt_for_section_tags(existing_tags: Sequence[str]) -> list[str]:
-    return ui.prompt_for_section_tags(existing_tags)
+def prompt_for_section_tags(
+    all_tags: Sequence[str],
+    top_level_tags: Sequence[str],
+    all_paths: Sequence[str],
+    suggested_tags: Sequence[str] = [],
+) -> list[str]:
+    return ui.prompt_for_section_tags(all_tags, top_level_tags, all_paths, suggested_tags)
 
 
 def show_diary_entry(
@@ -552,9 +563,13 @@ def get_htfs_adapter(diary_dir: Path) -> HTFSAdapter:
 def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
     agent.ensure_storage()
     if raw_text is None:
-        final_entry = launch_editor(
+        adapter = get_htfs_adapter(agent.diary_dir)
+        all_tags = adapter.list_tags()
+
+        final_entry, suggested_tags = launch_editor(
             state="Capturing update",
             rewrite=lambda text: agent.prepare_rewrite_for_review(agent.synthesize_entry(text)),
+            suggest_tags=lambda text: agent.suggest_tags_for_text(text, all_tags),
         )
         if not final_entry.strip():
             print("No update captured.")
@@ -562,10 +577,13 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
 
         path, appended = agent.append_entry_verbatim(final_entry)
         if appended:
-            adapter = get_htfs_adapter(agent.diary_dir)
             section = agent.latest_section_for_file(path)
             if section is not None:
-                selected_tags = prompt_for_section_tags(adapter.list_tags())
+                top_level_tags = adapter.get_top_level_tags()
+                all_paths = adapter.get_all_tag_paths()
+                selected_tags = prompt_for_section_tags(
+                    all_tags, top_level_tags, all_paths, suggested_tags=suggested_tags
+                )
                 if selected_tags:
                     adapter.add_tags(selected_tags)
                     adapter.tag_section(section, resource_tags_for_specs(selected_tags))
@@ -645,16 +663,34 @@ def run_show_day(agent: DiaryAgent, day_text: str | None = None) -> int:
     return 0
 
 
-def run_tags_show(agent: DiaryAgent, day_text: str, time_text: str) -> int:
-    section = resolve_section(agent, day_text, time_text)
+def run_tags_show(agent: DiaryAgent, day_text: str, time_text: str | None) -> int:
     adapter = get_htfs_adapter(agent.diary_dir)
-    tags = adapter.section_tags(section)
-    if not tags:
-        print(f"No HTFS tags found for {section.section_id}.")
-        return 0
-    print(f"[{section.section_id}]")
-    for tag in tags:
-        print(tag)
+    if time_text:
+        section = resolve_section(agent, day_text, time_text)
+        tags = adapter.section_tags(section)
+        if not tags:
+            print(f"No HTFS tags found for {section.section_id}.")
+            return 0
+        print(f"[{section.section_id}]")
+        for tag in tags:
+            print(tag)
+    else:
+        path = agent.file_for_day_input(day_text)
+        sections = agent.parse_day_sections(path)
+        if not sections:
+            print(f"No sections found for {path.name}.")
+            return 0
+
+        found_any = False
+        for section in sections:
+            tags = adapter.section_tags(section)
+            if tags:
+                found_any = True
+                print(f"[{section.section_id}]")
+                for tag in tags:
+                    print(f"  {tag}")
+        if not found_any:
+            print(f"No HTFS tags found for any section in {path.name}.")
     return 0
 
 
@@ -746,7 +782,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show HTFS tags for a specific diary section.",
     )
     tags_show_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
-    tags_show_parser.add_argument("time", help="Section time in HH:MM format.")
+    tags_show_parser.add_argument("time", nargs="?", help="Section time in HH:MM format.")
 
     tags_apply_parser = tags_subparsers.add_parser(
         "apply",

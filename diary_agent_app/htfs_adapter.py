@@ -76,6 +76,46 @@ class HTFSAdapter:
         finally:
             client.close()
 
+    def get_top_level_tags(self) -> list[str]:
+        client = self._client()
+        try:
+            all_tags = list(client.get_tags_list([]))
+            top_level = []
+            for tag in all_tags:
+                if not client.th.get_parent_tags(tag):
+                    top_level.append(tag)
+            return sorted(top_level)
+        finally:
+            client.close()
+
+    def get_child_tags(self, tag_name: str) -> list[str]:
+        client = self._client()
+        try:
+            return sorted(list(client.th.get_child_tags(tag_name)))
+        finally:
+            client.close()
+
+    def get_all_tag_paths(self) -> list[str]:
+        """Get all possible hierarchical tag paths."""
+        client = self._client()
+        try:
+            all_tags = list(client.get_tags_list([]))
+            paths = []
+
+            def build_paths(current_tag, current_path):
+                full_path = "/".join(current_path + [current_tag])
+                paths.append(full_path)
+                children = client.th.get_child_tags(current_tag)
+                for child in children:
+                    build_paths(child, current_path + [current_tag])
+
+            top_level = [tag for tag in all_tags if not client.th.get_parent_tags(tag)]
+            for tag in top_level:
+                build_paths(tag, [])
+            return sorted(paths)
+        finally:
+            client.close()
+
     def link_tags(self, tag: str, parent_tag: str) -> bool:
         client = self._client()
         try:

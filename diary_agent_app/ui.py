@@ -13,8 +13,9 @@ try:
     from prompt_toolkit.layout.containers import ConditionalContainer, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
     from prompt_toolkit.filters import Condition
-    from prompt_toolkit.widgets import Box, Frame, TextArea
+    from prompt_toolkit.widgets import Box, Frame, TextArea, CheckboxList
     from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import WordCompleter
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.shortcuts import button_dialog, checkboxlist_dialog, message_dialog
@@ -30,7 +31,9 @@ except ImportError:  # pragma: no cover - runtime dependency
     Box = None
     Frame = None
     TextArea = None
+    CheckboxList = None
     PromptSession = None
+    WordCompleter = None
     HTML = None
     KeyBindings = None
     button_dialog = None
@@ -75,6 +78,7 @@ def require_prompt_toolkit() -> None:
         or Box is None
         or Frame is None
         or TextArea is None
+        or CheckboxList is None
         or button_dialog is None
         or checkboxlist_dialog is None
         or Style is None
@@ -130,30 +134,158 @@ def confirm_similar_todo_addition_cli(match: SimilarTodoMatch, stdin=None) -> bo
         print("Please answer y or n.")
 
 
-def prompt_for_section_tags(existing_tags: Sequence[str]) -> list[str]:
-    prompt_text = "Section tags> "
-    if existing_tags:
-        print("\nExisting HTFS tags:")
-        print(", ".join(existing_tags))
-    else:
-        print("\nNo existing HTFS tags yet.")
-    print("Enter tags separated by commas, or press Enter to skip.")
+def prompt_for_section_tags(
+    all_tags: Sequence[str],
+    top_level_tags: Sequence[str],
+    all_paths: Sequence[str],
+    suggested_tags: Sequence[str] = [],
+) -> list[str]:
+    unique_tags = sorted(dict.fromkeys(all_tags))
+    unique_paths = sorted(dict.fromkeys(all_paths))
+    all_suggestions = sorted(list(set(unique_tags + unique_paths)))
 
     try:
         require_prompt_toolkit()
-        session = PromptSession()
-        raw_value = session.prompt(prompt_text)
-    except RuntimeError:
-        raw_value = input(prompt_text)
+        if not sys.stdin.isatty():
+            raise RuntimeError("Not a TTY")
 
-    return [part.strip() for part in raw_value.split(",") if part.strip()]
+        # UI Components
+        top_level_text = "\n".join([f"• {t}" for t in top_level_tags])
+        top_level_window = Window(
+            content=FormattedTextControl(top_level_text),
+            height=len(top_level_tags) + 1,
+        )
+
+        # Pre-populate with suggested tags
+        initial_text = ", ".join(suggested_tags)
+        tags_input = TextArea(
+            text=initial_text,
+            height=3,
+            prompt="Tags (comma separated)> ",
+            multiline=True,
+            completer=WordCompleter(all_suggestions, ignore_case=True, sentence=True),
+            complete_while_typing=True,
+        )
+
+        body = HSplit(
+            [
+                Frame(top_level_window, title="Top Level Tags"),
+                Frame(tags_input, title="Enter Tags (Hierarchical or Direct)"),
+                Window(
+                    height=1,
+                    content=FormattedTextControl(
+                        lambda: HTML(
+                            "<b>Tab:</b> Autocomplete | <b>Enter:</b> Save | <b>Esc:</b> Cancel"
+                        )
+                    ),
+                ),
+            ]
+        )
+
+        root = Box(body, padding=1)
+        kb = KeyBindings()
+
+        @kb.add("enter")
+        def _(event):
+            event.app.exit(result=True)
+
+        @kb.add("escape")
+        @kb.add("c-c")
+        def _(event):
+            event.app.exit(result=False)
+
+        app = Application(
+            layout=Layout(root, focused_element=tags_input),
+            key_bindings=kb,
+            full_screen=True,
+            style=DIALOG_STYLE,
+        )
+
+        success = app.run()
+        if not success:
+            return []
+
+        # Parse and validate tags
+        entered_tags = [t.strip() for t in tags_input.text.split(",") if t.strip()]
+        final_tags = []
+        new_tags_to_confirm = []
+
+        existing_set = set(all_suggestions)
+        for tag in entered_tags:
+            if tag in existing_set:
+                final_tags.append(tag)
+            else:
+                new_tags_to_confirm.append(tag)
+
+        if new_tags_to_confirm:
+            tags_str = ", ".join(new_tags_to_confirm)
+            confirm = button_dialog(
+                title="Create New Tags?",
+                text=f"The following tags do not exist:\n\n{tags_str}\n\nDo you want to create them?",
+                buttons=[
+                    ("Yes", True),
+                    ("No", False),
+                ],
+                style=DIALOG_STYLE,
+            ).run()
+
+            if confirm:
+                final_tags.extend(new_tags_to_confirm)
+
+        return sorted(list(set(final_tags)))
+
+    except (RuntimeError, Exception):
+        # Fallback to simple input
+        prompt_text = "Section tags> "
+        if top_level_tags:
+            print("\nTop level HTFS tags:")
+            for t in top_level_tags:
+                print(f"  • {t}")
+        else:
+            print("\nNo HTFS tags yet.")
+
+        if suggested_tags:
+            print(f"Suggestions: {', '.join(suggested_tags)}")
+
+        print("Enter tags separated by commas (e.g., Topic/AI, People/Alice), or press Enter to skip.")
+        if PromptSession is not None:
+            completer = WordCompleter(all_suggestions, ignore_case=True, sentence=True)
+            session = PromptSession(completer=completer)
+            try:
+                raw_value = session.prompt(prompt_text, complete_while_typing=True)
+            except (EOFError, KeyboardInterrupt):
+                return []
+        else:
+            try:
+                raw_value = input(prompt_text)
+            except (EOFError, KeyboardInterrupt):
+                return []
+
+        entered_tags = [part.strip() for part in raw_value.split(",") if part.strip()]
+        existing_set = set(all_suggestions)
+        final_tags = []
+        new_tags = []
+        for t in entered_tags:
+            if t in existing_set:
+                final_tags.append(t)
+            else:
+                new_tags.append(t)
+
+        if new_tags:
+            print(f"\nThe following tags are new: {', '.join(new_tags)}")
+            ans = input("Create these new tags? [y/N]: ").strip().lower()
+            if ans in {"y", "yes"}:
+                final_tags.extend(new_tags)
+
+        return sorted(list(set(final_tags)))
 
 
 def launch_editor(
     initial_text: str = "",
     state: str = "Capturing update",
     rewrite: Callable[[str], str] | None = None,
-) -> str:
+    suggest_tags: Callable[[str], list[str]] | None = None,
+) -> tuple[str, list[str]]:
     try:
         require_prompt_toolkit()
         session = PromptSession(multiline=True)
@@ -162,18 +294,22 @@ def launch_editor(
             "message": state,
             "rewriting": False,
             "rewrite_ready": False,
+            "suggesting_tags": False,
+            "suggested_tags": [],
         }
-        session.default_buffer.read_only = Condition(lambda: editor_state["rewriting"])
+        session.default_buffer.read_only = Condition(
+            lambda: editor_state["rewriting"] or editor_state["suggesting_tags"]
+        )
 
         @bindings.add("c-d")
         def _(event) -> None:
-            if editor_state["rewriting"]:
+            if editor_state["rewriting"] or editor_state["suggesting_tags"]:
                 return
             event.current_buffer.validate_and_handle()
 
         @bindings.add("escape", "r")
         def _(event) -> None:
-            if rewrite is None or editor_state["rewriting"]:
+            if rewrite is None or editor_state["rewriting"] or editor_state["suggesting_tags"]:
                 return
 
             current_text = event.current_buffer.text
@@ -199,25 +335,57 @@ def launch_editor(
 
             event.app.create_background_task(rewrite_task())
 
-        return session.prompt(
+        @bindings.add("escape", "s")
+        def _(event) -> None:
+            if suggest_tags is None or editor_state["rewriting"] or editor_state["suggesting_tags"]:
+                return
+
+            current_text = event.current_buffer.text
+            editor_state["suggesting_tags"] = True
+            editor_state["message"] = "Waiting for tag suggestions..."
+            event.app.invalidate()
+
+            async def suggest_task() -> None:
+                try:
+                    loop = asyncio.get_running_loop()
+                    tags = await loop.run_in_executor(None, suggest_tags, current_text)
+                except Exception as exc:  # pragma: no cover
+                    editor_state["message"] = f"Suggestion failed: {exc}"
+                    editor_state["suggesting_tags"] = False
+                else:
+                    editor_state["suggesting_tags"] = False
+                    editor_state["suggested_tags"] = tags
+                    editor_state["message"] = f"Tags suggested: {', '.join(tags)}" if tags else "No tags suggested."
+                finally:
+                    event.app.invalidate()
+
+            event.app.create_background_task(suggest_task())
+
+        final_text = session.prompt(
             "Diary update> ",
             default=initial_text,
             key_bindings=bindings,
             bottom_toolbar=lambda: status_toolbar(
                 (
-                    "Waiting for LLM rewrite..."
-                    if editor_state["rewriting"]
+                    "Waiting..."
+                    if (editor_state["rewriting"] or editor_state["suggesting_tags"])
                     else (
                         editor_state["message"]
                         + (
-                            "  Alt+R rewrite again"
-                            if rewrite is not None and editor_state["rewrite_ready"]
-                            else ("  Alt+R rewrite" if rewrite is not None else "")
+                            "  Alt+R rewrite"
+                            if rewrite is not None and not editor_state["rewrite_ready"]
+                            else ("  Alt+R rewrite again" if rewrite is not None else "")
+                        )
+                        + (
+                            "  Alt+S suggest tags"
+                            if suggest_tags is not None
+                            else ""
                         )
                     )
                 )
             ),
         )
+        return final_text, editor_state["suggested_tags"]
     except RuntimeError:
         # CLI fallback
         print("Enter your diary update (Ctrl-D or empty line to finish):")
@@ -230,7 +398,7 @@ def launch_editor(
                 lines.append(line)
             except EOFError:
                 break
-        return "\n".join(lines)
+        return "\n".join(lines), []
 
 
 def show_diary_entry(
