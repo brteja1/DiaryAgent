@@ -139,6 +139,16 @@ class HTFSAdapter:
         finally:
             client.close()
 
+    def clear_section_tags(self, section: DiarySection) -> None:
+        client = self._client()
+        try:
+            resource_path = self.resource_path_for_section(section)
+            current_tags = client.get_resource_tags(resource_path)
+            if current_tags:
+                client.untag_resource(resource_path, list(current_tags))
+        finally:
+            client.close()
+
     def query_resource_paths(self, tag_expression: str) -> list[str]:
         client = self._client()
         try:

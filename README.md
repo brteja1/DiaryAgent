@@ -149,7 +149,7 @@ Behavior:
 - Any other format is rejected with an error.
 - The matching diary entry is shown exactly as stored.
 - If `prompt_toolkit` is available, the entry opens in a scrollable terminal viewer.
-- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, `g` to fuzzy-pick another existing entry, and exits with `q`, `Esc`, or `Ctrl+C`.
+- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, `g` to fuzzy-pick another existing entry, `e` to edit the current timestamp section, `t` to manage tags for that section, and exits with `q`, `Esc`, or `Ctrl+C`.
 - If `prompt_toolkit` is unavailable, the stored entry is printed to stdout.
 
 ### Show A Specific Day

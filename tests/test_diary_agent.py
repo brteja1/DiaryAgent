@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import sys
 from pathlib import Path
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import diary_agent
 from diary_agent_app.htfs_adapter import HTFSAdapter
+import diary_agent_app.ui as ui
 
 
 def test_parse_config_text_ignores_comments_and_invalid_lines():
@@ -668,6 +670,41 @@ def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, 
     }
 
 
+def test_launch_editor_uses_thread_mode_when_called_from_async_context(monkeypatch):
+    captured = {}
+
+    class FakeBuffer:
+        read_only = None
+
+    class FakeSession:
+        def __init__(self, *args, **kwargs):
+            self.default_buffer = FakeBuffer()
+
+        def prompt(self, *args, **kwargs):
+            captured["in_thread"] = kwargs.get("in_thread")
+            return "edited text"
+
+    class FakeKeyBindings:
+        def add(self, *args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+    monkeypatch.setattr(ui, "require_prompt_toolkit", lambda: None)
+    monkeypatch.setattr(ui, "PromptSession", FakeSession)
+    monkeypatch.setattr(ui, "KeyBindings", FakeKeyBindings)
+    monkeypatch.setattr(ui, "Condition", lambda predicate: predicate)
+
+    async def call_launch_editor():
+        return ui.launch_editor(initial_text="draft")
+
+    result = asyncio.run(call_launch_editor())
+
+    assert captured["in_thread"] is True
+    assert result == ("edited text", [])
+
+
 def test_synthesize_entry_strips_headings_and_preserves_nested_bullets(monkeypatch):
     class FakeOllama:
         @staticmethod
@@ -875,7 +912,7 @@ def test_run_show_day_opens_requested_file_in_ui(monkeypatch, tmp_path):
     monkeypatch.setattr(
         diary_agent,
         "show_diary_entry",
-        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None: shown.update(
+        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None, get_tags=None, toggle_todo=None, **kwargs: shown.update(
             {
                 "title": title,
                 "body": body,
@@ -921,7 +958,7 @@ def test_run_show_day_defaults_to_today_when_day_omitted(monkeypatch, tmp_path):
     monkeypatch.setattr(
         diary_agent,
         "show_diary_entry",
-        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None: shown.update({"title": title, "body": body}),
+        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None, get_tags=None, toggle_todo=None, **kwargs: shown.update({"title": title, "body": body}),
     )
 
     exit_code = diary_agent.run_show_day(agent)
@@ -931,6 +968,65 @@ def test_run_show_day_defaults_to_today_when_day_omitted(monkeypatch, tmp_path):
         "title": "28_03_2026.md",
         "body": "- Defaulted to today",
     }
+
+
+def test_run_show_day_wires_htfs_callbacks(monkeypatch, tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    target = tmp_path / "05_03_2026.md"
+    target.write_text("## 14:30\n- Note\n", encoding="utf-8")
+    monkeypatch.setattr(agent, "ensure_storage", lambda: None)
+    monkeypatch.setattr(agent, "get_section_tags", lambda _path: {"14:30": ["Project/DiaryAgent"]})
+    monkeypatch.setattr(agent, "suggest_tags_for_text", lambda text, all_tags: ["Topic/Retrieval"])
+
+    adapter_calls = {}
+
+    class FakeAdapter:
+        def list_tags(self):
+            adapter_calls["list_tags"] = True
+            return ["Project/DiaryAgent", "Topic/Retrieval"]
+
+        def get_top_level_tags(self):
+            adapter_calls["top_level"] = True
+            return ["Project", "Topic"]
+
+        def get_all_tag_paths(self):
+            adapter_calls["all_paths"] = True
+            return ["Project/DiaryAgent", "Topic/Retrieval"]
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+
+    shown = {}
+
+    def fake_show_diary_entry(
+        title,
+        body,
+        previous_entry=None,
+        next_entry=None,
+        pick_entry=None,
+        get_tags=None,
+        toggle_todo=None,
+        update_section=None,
+        set_tags=None,
+        get_all_tags=None,
+        suggest_tags=None,
+    ):
+        shown["title"] = title
+        shown["body"] = body
+        shown["all_tags"] = get_all_tags()
+        shown["suggested"] = suggest_tags("note")
+
+    monkeypatch.setattr(diary_agent, "show_diary_entry", fake_show_diary_entry)
+
+    exit_code = diary_agent.run_show_day(agent, day_text="05_03_2026")
+
+    assert exit_code == 0
+    assert shown == {
+        "title": "05_03_2026.md",
+        "body": "## 14:30\n- Note",
+        "all_tags": (["Project/DiaryAgent", "Topic/Retrieval"], ["Project", "Topic"], ["Project/DiaryAgent", "Topic/Retrieval"]),
+        "suggested": ["Topic/Retrieval"],
+    }
+    assert adapter_calls == {"list_tags": True, "top_level": True, "all_paths": True}
 
 
 def test_run_show_day_falls_back_to_stdout_when_ui_unavailable(monkeypatch, tmp_path, capsys):
@@ -946,7 +1042,7 @@ def test_run_show_day_falls_back_to_stdout_when_ui_unavailable(monkeypatch, tmp_
     monkeypatch.setattr(
         diary_agent,
         "show_diary_entry",
-        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None: (_ for _ in ()).throw(RuntimeError("missing prompt_toolkit")),
+        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None, get_tags=None, toggle_todo=None, **kwargs: (_ for _ in ()).throw(RuntimeError("missing prompt_toolkit")),
     )
 
     exit_code = diary_agent.run_show_day(agent, day_text="05_03_2026")

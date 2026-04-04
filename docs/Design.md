@@ -241,7 +241,13 @@ Behavior:
 - At the ends of history, navigation is a no-op.
 - `g` opens an in-place fuzzy picker over existing diary files.
 - The picker lists newest first and shows a human-readable date plus a preview line.
+- `e` opens a nested editor for the timestamp section under the cursor and writes the edited section back into the current file.
+- `t` opens HTFS tag management for the timestamp section under the cursor.
 - Without `prompt_toolkit`, the file contents are printed to stdout.
+
+Implementation note:
+
+- The nested editor and tag-management dialogs are launched in an event-loop-safe way so the show screen can invoke them without tripping over the active prompt_toolkit application context.
 
 ## Search Flow
 

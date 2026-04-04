@@ -6,9 +6,10 @@ import sys
 from collections.abc import Callable, Sequence
 
 from .models import DiaryEntryOption, SimilarTodoMatch
+from .core import TODO_RE
 
 try:
-    from prompt_toolkit.application import Application
+    from prompt_toolkit.application import Application, run_in_terminal
     from prompt_toolkit.layout import HSplit, Layout
     from prompt_toolkit.layout.containers import ConditionalContainer, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
@@ -88,6 +89,14 @@ def require_prompt_toolkit() -> None:
         )
 
 
+def _prompt_should_run_in_thread() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
 def status_toolbar(state: str) -> HTML:
     now = dt.datetime.now().strftime("%d %b %Y %H:%M")
     return HTML(
@@ -138,6 +147,7 @@ def prompt_for_section_tags(
     all_tags: Sequence[str],
     top_level_tags: Sequence[str],
     all_paths: Sequence[str],
+    initial_tags: Sequence[str] = [],
     suggested_tags: Sequence[str] = [],
 ) -> list[str]:
     unique_tags = sorted(dict.fromkeys(all_tags))
@@ -156,8 +166,9 @@ def prompt_for_section_tags(
             height=len(top_level_tags) + 1,
         )
 
-        # Pre-populate with suggested tags
-        initial_text = ", ".join(suggested_tags)
+        # Pre-populate with initial and suggested tags
+        combined_initial = sorted(list(set(list(initial_tags) + list(suggested_tags))))
+        initial_text = ", ".join(combined_initial)
         tags_input = TextArea(
             text=initial_text,
             height=3,
@@ -201,7 +212,7 @@ def prompt_for_section_tags(
             style=DIALOG_STYLE,
         )
 
-        success = app.run()
+        success = app.run(in_thread=_prompt_should_run_in_thread())
         if not success:
             return []
 
@@ -384,6 +395,7 @@ def launch_editor(
                     )
                 )
             ),
+            in_thread=_prompt_should_run_in_thread(),
         )
         return final_text, editor_state["suggested_tags"]
     except RuntimeError:
@@ -407,11 +419,61 @@ def show_diary_entry(
     previous_entry=None,
     next_entry=None,
     pick_entry=None,
+    get_tags=None,
+    toggle_todo=None,
+    update_section=None,
+    set_tags=None,
+    get_all_tags=None,
+    suggest_tags=None,
 ) -> None:
     require_prompt_toolkit()
 
+    def inject_tags(content, tags_data):
+        if not tags_data:
+            return content
+        lines = content.splitlines()
+        for i, line in enumerate(lines):
+            # Matches '## HH:MM'
+            if line.startswith("## ") and len(line.strip()) == 8:
+                heading = line.strip()[3:]
+                tags = tags_data.get(heading, [])
+                if tags:
+                    lines[i] = f"{line.rstrip()} {{{', '.join(tags)}}}"
+        return "\n".join(lines)
+
+    def get_current_section(content, line_no):
+        lines = content.splitlines()
+        current_heading = None
+        current_body_lines = []
+        
+        # Traverse backwards to find the heading
+        for i in range(line_no - 1, -1, -1):
+            if lines[i].startswith("## ") and len(lines[i].strip()) >= 8:
+                current_heading = lines[i].strip()[3:8] # Extract HH:MM
+                break
+        
+        if not current_heading:
+            return None, ""
+            
+        # Traverse forwards from the heading to find the next heading or EOF
+        found_heading = False
+        for i, line in enumerate(lines):
+            if line.startswith(f"## {current_heading}"):
+                found_heading = True
+                continue
+            if found_heading:
+                if line.startswith("## ") and len(line.strip()) >= 8:
+                    break
+                current_body_lines.append(line)
+                
+        return current_heading, "\n".join(current_body_lines).strip()
+
+    current_tags = get_tags(title) if get_tags else {}
+    raw_content_state = {"body": body}
+    display_body = inject_tags(raw_content_state["body"], current_tags)
+
     text_area = TextArea(
-        text=body,
+        text=display_body,
         read_only=True,
         scrollbar=True,
         focusable=True,
@@ -429,19 +491,22 @@ def show_diary_entry(
         return picker_state["open"]
 
     picker_visible = Condition(picker_filter)
+
+    def get_help_text():
+        if picker_state["open"]:
+            return HTML("<b>Move:</b> Up / Down  <b>Select:</b> Enter  <b>Cancel:</b> Esc")
+        return HTML(
+            "<b>Browse:</b> Arrows  "
+            "<b>Jump:</b> [ / ] / g  "
+            "<b>Toggle TODO:</b> Space  "
+            "<b>Edit:</b> e  "
+            "<b>Tags:</b> t  "
+            "<b>Exit:</b> q / Esc"
+        )
+
     help_bar = Window(
         height=1,
-        content=FormattedTextControl(
-            lambda: HTML(
-                "<b>Move:</b> Up / Down  "
-                "<b>Select:</b> Enter  "
-                "<b>Cancel:</b> Esc"
-                if picker_state["open"]
-                else "<b>Browse:</b> Arrow keys / PageUp / PageDown  "
-                "<b>Jump:</b> [ / ] / g  "
-                "<b>Exit:</b> q, Esc, Ctrl+C"
-            )
-        ),
+        content=FormattedTextControl(get_help_text),
     )
 
     frame = Frame(text_area, title=title)
@@ -510,6 +575,13 @@ def show_diary_entry(
             return
         event.app.exit()
 
+    def update_view(new_title, new_content):
+        frame.title = new_title
+        raw_content_state["body"] = new_content
+        tags_data = get_tags(new_title) if get_tags else {}
+        text_area.text = inject_tags(new_content, tags_data)
+        text_area.buffer.cursor_position = 0
+
     def move_to_entry(loader) -> None:
         if loader is None:
             return
@@ -517,9 +589,7 @@ def show_diary_entry(
         if target is None:
             return
         next_title, next_body = target
-        frame.title = next_title
-        text_area.text = next_body
-        text_area.buffer.cursor_position = 0
+        update_view(next_title, next_body)
 
     @bindings.add("[")
     def _(event) -> None:
@@ -538,6 +608,75 @@ def show_diary_entry(
         query_input.text = ""
         event.app.layout.focus(query_input)
         event.app.invalidate()
+
+    @bindings.add("space", filter=~picker_visible)
+    def _(event) -> None:
+        if toggle_todo is None:
+            return
+        line_no = text_area.buffer.document.cursor_position_row + 1
+        new_content = toggle_todo(frame.title, line_no)
+        if new_content is not None:
+            cursor_pos = text_area.buffer.cursor_position
+            raw_content_state["body"] = new_content
+            tags_data = get_tags(frame.title) if get_tags else {}
+            text_area.text = inject_tags(new_content, tags_data)
+            text_area.buffer.cursor_position = cursor_pos
+
+    @bindings.add("e", filter=~picker_visible)
+    async def _(event) -> None:
+        if update_section is None:
+            return
+        line_no = text_area.buffer.document.cursor_position_row + 1
+        heading, section_body = get_current_section(raw_content_state["body"], line_no)
+        if not heading:
+            return
+
+        def suggest_tags_callback(text):
+            if suggest_tags:
+                return suggest_tags(text)
+            return []
+
+        # Use run_in_terminal to avoid hanging the event loop
+        result = await run_in_terminal(
+            lambda: launch_editor(
+                initial_text=section_body,
+                state=f"Editing {heading}",
+                suggest_tags=suggest_tags_callback,
+            )
+        )
+        
+        if result:
+            new_body, _ = result
+            if new_body:
+                updated_content = update_section(frame.title, heading, new_body)
+                if updated_content:
+                    update_view(frame.title, updated_content)
+
+    @bindings.add("t", filter=~picker_visible)
+    async def _(event) -> None:
+        if set_tags is None or get_all_tags is None:
+            return
+        line_no = text_area.buffer.document.cursor_position_row + 1
+        heading, _ = get_current_section(raw_content_state["body"], line_no)
+        if not heading:
+            return
+        
+        all_tags, top_level, all_paths = get_all_tags()
+        current_section_tags = (get_tags(frame.title) if get_tags else {}).get(heading, [])
+        
+        # Use run_in_terminal for the tagging dialog too
+        new_tags = await run_in_terminal(
+            lambda: prompt_for_section_tags(
+                all_tags,
+                top_level,
+                all_paths,
+                initial_tags=current_section_tags,
+            )
+        )
+        
+        if new_tags is not None and new_tags != current_section_tags:
+            set_tags(frame.title, heading, new_tags)
+            update_view(frame.title, raw_content_state["body"])
 
     query_input.buffer.on_text_changed += lambda _event: (
         picker_state.__setitem__("selected", 0)
@@ -564,9 +703,9 @@ def show_diary_entry(
         if not matches:
             return
         selected = matches[picker_state["selected"]]
-        frame.title = selected.file_path.name
-        text_area.text = selected.file_path.read_text(encoding="utf-8").rstrip()
-        text_area.buffer.cursor_position = 0
+        new_title = selected.file_path.name
+        new_body = selected.file_path.read_text(encoding="utf-8").rstrip()
+        update_view(new_title, new_body)
         picker_state["open"] = False
         query_input.text = ""
         picker_state["selected"] = 0

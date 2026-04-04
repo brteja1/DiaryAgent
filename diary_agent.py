@@ -111,6 +111,12 @@ class DiaryAgent:
         sections = self.parse_day_sections(file_path)
         return sections[-1] if sections else None
 
+    def get_section_tags(self, file_path: Path) -> dict[str, list[str]]:
+        """Get tags for all sections in a file."""
+        adapter = HTFSAdapter(self.diary_dir)
+        sections = self.parse_day_sections(file_path)
+        return {s.heading: adapter.section_tags(s) for s in sections}
+
     def adjacent_entry(self, current_path: Path, step: int) -> tuple[str, str] | None:
         files = self.diary_files()
         try:
@@ -295,6 +301,57 @@ class DiaryAgent:
                 updates += 1
             file_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
         return updates
+
+    def toggle_todo(self, file_path: Path, line_number: int) -> str | None:
+        """Toggle a TODO on a specific line and return the updated file content."""
+        if not file_path.exists():
+            return None
+        lines = file_path.read_text(encoding="utf-8").splitlines()
+        if not (1 <= line_number <= len(lines)):
+            return None
+
+        line = lines[line_number - 1]
+        match = TODO_RE.match(line)
+        if not match:
+            return None
+
+        new_state = " " if match.group("state") != " " else "x"
+        lines[line_number - 1] = f"{match.group('indent')}- [{new_state}] {match.group('text').strip()}"
+        new_content = "\n".join(lines).rstrip() + "\n"
+        file_path.write_text(new_content, encoding="utf-8")
+        return new_content.rstrip()
+
+    def update_section(self, file_path: Path, heading: str, new_body: str) -> str | None:
+        """Replace the body of a specific section in the file."""
+        if not file_path.exists():
+            return None
+        
+        sections = self.parse_day_sections(file_path)
+        found = False
+        for i, s in enumerate(sections):
+            if s.heading == heading:
+                sections[i] = DiarySection(file_path=file_path, heading=heading, body=new_body.strip())
+                found = True
+                break
+        
+        if not found:
+            return None
+            
+        new_content = ""
+        for s in sections:
+            new_content += f"## {s.heading}\n\n{s.body}\n\n"
+        
+        file_path.write_text(new_content.rstrip() + "\n", encoding="utf-8")
+        return new_content.rstrip()
+
+    def set_section_tags(self, section: DiarySection, tags: list[str]) -> list[str]:
+        """Clear and set new tags for a section."""
+        adapter = HTFSAdapter(self.diary_dir)
+        adapter.clear_section_tags(section)
+        if tags:
+            adapter.add_tags(tags)
+            adapter.tag_section(section, resource_tags_for_specs(tags))
+        return adapter.section_tags(section)
 
     def search(self, query: str, limit: int = 6) -> list[tuple[Path, str, int]]:
         tokens = tokenize(query)
@@ -525,9 +582,10 @@ def prompt_for_section_tags(
     all_tags: Sequence[str],
     top_level_tags: Sequence[str],
     all_paths: Sequence[str],
+    initial_tags: Sequence[str] = [],
     suggested_tags: Sequence[str] = [],
 ) -> list[str]:
-    return ui.prompt_for_section_tags(all_tags, top_level_tags, all_paths, suggested_tags)
+    return ui.prompt_for_section_tags(all_tags, top_level_tags, all_paths, initial_tags, suggested_tags)
 
 
 def show_diary_entry(
@@ -536,6 +594,12 @@ def show_diary_entry(
     previous_entry=None,
     next_entry=None,
     pick_entry=None,
+    get_tags=None,
+    toggle_todo=None,
+    update_section=None,
+    set_tags=None,
+    get_all_tags=None,
+    suggest_tags=None,
 ) -> None:
     ui.show_diary_entry(
         title,
@@ -543,6 +607,12 @@ def show_diary_entry(
         previous_entry=previous_entry,
         next_entry=next_entry,
         pick_entry=pick_entry,
+        get_tags=get_tags,
+        toggle_todo=toggle_todo,
+        update_section=update_section,
+        set_tags=set_tags,
+        get_all_tags=get_all_tags,
+        suggest_tags=suggest_tags,
     )
 
 
@@ -643,6 +713,7 @@ def run_show_day(agent: DiaryAgent, day_text: str | None = None) -> int:
         return 0
 
     body = path.read_text(encoding="utf-8").rstrip()
+    adapter = get_htfs_adapter(agent.diary_dir)
     try:
         show_diary_entry(
             path.name,
@@ -655,8 +726,18 @@ def run_show_day(agent: DiaryAgent, day_text: str | None = None) -> int:
                 agent.diary_dir / current_title,
                 1,
             ),
-            pick_entry=lambda: agent.entry_options(),
+            pick_entry=agent.entry_options,
+            get_tags=lambda current_title: agent.get_section_tags(agent.diary_dir / current_title),
+            toggle_todo=lambda current_title, line: agent.toggle_todo(agent.diary_dir / current_title, line),
+            update_section=lambda current_title, heading, body: agent.update_section(agent.diary_dir / current_title, heading, body),
+            set_tags=lambda current_title, heading, tags: agent.set_section_tags(
+                DiarySection(agent.diary_dir / current_title, heading, ""),
+                tags
+            ),
+            get_all_tags=lambda: (adapter.list_tags(), adapter.get_top_level_tags(), adapter.get_all_tag_paths()),
+            suggest_tags=lambda text: agent.suggest_tags_for_text(text, adapter.list_tags()),
         )
+
     except RuntimeError:
         print(f"[{path.name}]")
         print(body)

@@ -141,6 +141,8 @@ This file describes the current implemented behavior of the diary agent in this 
 - `]` moves to the next existing diary file in filename/date order.
 - If there is no previous or next entry, that navigation key is a no-op.
 - `g` opens an in-place fuzzy picker for existing diary entries.
+- `e` edits the timestamp section under the cursor in a nested prompt_toolkit editor.
+- `t` opens HTFS tag management for the timestamp section under the cursor.
 - The fuzzy picker:
   - lists existing diary files only
   - orders them newest first
