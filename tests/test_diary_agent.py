@@ -484,6 +484,172 @@ def test_run_tags_suggest_uses_available_htfs_tags(monkeypatch, tmp_path, capsys
     assert capsys.readouterr().out == "[26_03_2026.md#14:30]\nProject/DiaryAgent\n"
 
 
+def test_run_tags_list_prints_all_tags(monkeypatch, tmp_path, capsys):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    class FakeAdapter:
+        def list_tags(self):
+            return ["Area", "Project", "Topic"]
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+
+    exit_code = diary_agent.run_tags_list(agent)
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == "Area\nProject\nTopic\n"
+
+
+def test_run_tags_tree_prints_hierarchy(monkeypatch, tmp_path, capsys):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    class FakeAdapter:
+        def list_tags(self):
+            return ["Area", "Project", "DiaryAgent", "Topic", "Retrieval"]
+
+        def get_top_level_tags(self):
+            return ["Project", "Topic"]
+
+        def get_child_tags(self, tag_name):
+            return {
+                "Project": ["DiaryAgent"],
+                "DiaryAgent": ["Release"],
+                "Topic": ["Retrieval"],
+                "Area": [],
+                "Retrieval": [],
+            }.get(tag_name, [])
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+
+    exit_code = diary_agent.run_tags_tree(agent)
+
+    assert exit_code == 0
+    assert capsys.readouterr().out == (
+        "Project\n"
+        "  DiaryAgent\n"
+        "    Release\n"
+        "Topic\n"
+        "  Retrieval\n"
+    )
+
+
+def test_run_tags_tree_rejects_missing_root(monkeypatch, tmp_path, capsys):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    class FakeAdapter:
+        def list_tags(self):
+            return ["Project"]
+
+        def get_top_level_tags(self):
+            return ["Project"]
+
+        def get_child_tags(self, tag_name):
+            return []
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+
+    exit_code = diary_agent.run_tags_tree(agent, root_tag="Missing")
+
+    assert exit_code == 1
+    assert capsys.readouterr().out == "Tag not found: Missing\n"
+
+
+def test_run_tags_delete_recursively_deletes_descendants_first(monkeypatch, tmp_path, capsys):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    deleted = []
+    checked = []
+
+    class FakeAdapter:
+        def list_tags(self):
+            return ["Project", "Project/Alpha", "Project/Alpha/Reports"]
+
+        def get_tag_descendants(self, tag_name):
+            return ["Project/Alpha/Reports", "Project/Alpha"] if tag_name == "Project" else []
+
+        def tag_has_usage(self, tag_name):
+            checked.append(tag_name)
+            return False
+
+        def delete_tag(self, tag_name):
+            deleted.append(tag_name)
+            return True
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+
+    exit_code = diary_agent.run_tags_delete(
+        agent,
+        "Project",
+        descendants=True,
+        only_unused=True,
+        yes=True,
+    )
+
+    assert exit_code == 0
+    assert checked == ["Project/Alpha/Reports", "Project/Alpha", "Project"]
+    assert deleted == ["Project/Alpha/Reports", "Project/Alpha", "Project"]
+    assert capsys.readouterr().out == "Deleted 3 tag(s): Project/Alpha/Reports, Project/Alpha, Project\n"
+
+
+def test_run_tags_delete_blocks_when_tags_are_used(monkeypatch, tmp_path, capsys):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    deleted = []
+
+    class FakeAdapter:
+        def list_tags(self):
+            return ["Project"]
+
+        def get_tag_descendants(self, tag_name):
+            return []
+
+        def tag_has_usage(self, tag_name):
+            return tag_name == "Project"
+
+        def delete_tag(self, tag_name):
+            deleted.append(tag_name)
+            return True
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+
+    exit_code = diary_agent.run_tags_delete(
+        agent,
+        "Project",
+        descendants=False,
+        only_unused=True,
+        yes=True,
+    )
+
+    assert exit_code == 1
+    assert deleted == []
+    assert capsys.readouterr().out == (
+        "Cannot delete tags that are still used by diary resources: Project\n"
+    )
+
+
+def test_build_parser_accepts_tag_delete():
+    parser = diary_agent.build_parser()
+
+    args = parser.parse_args(["tags", "delete", "Project", "--descendants", "--unused-only", "--yes"])
+
+    assert args.command == "tags"
+    assert args.tags_command == "delete"
+    assert args.tag == "Project"
+    assert args.descendants is True
+    assert args.unused_only is True
+    assert args.yes is True
+
+
+def test_build_parser_accepts_tag_list_and_tree():
+    parser = diary_agent.build_parser()
+
+    list_args = parser.parse_args(["tags", "ls"])
+    tree_args = parser.parse_args(["tags", "tree", "Project"])
+
+    assert list_args.command == "tags"
+    assert list_args.tags_command == "ls"
+    assert tree_args.command == "tags"
+    assert tree_args.tags_command == "tree"
+    assert tree_args.tag == "Project"
+
+
 def test_run_capture_reports_duplicate_update(monkeypatch, tmp_path, capsys):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
     monkeypatch.setattr(agent, "ensure_storage", lambda: None)

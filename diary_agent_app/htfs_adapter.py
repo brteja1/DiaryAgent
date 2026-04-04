@@ -95,6 +95,39 @@ class HTFSAdapter:
         finally:
             client.close()
 
+    def get_tag_descendants(self, tag_name: str) -> list[str]:
+        client = self._client()
+        try:
+            seen: set[str] = set()
+            descendants: list[str] = []
+
+            def walk(current_tag: str) -> None:
+                for child_tag in client.th.get_child_tags(current_tag):
+                    if child_tag in seen:
+                        continue
+                    seen.add(child_tag)
+                    walk(child_tag)
+                    descendants.append(child_tag)
+
+            walk(tag_name)
+            return descendants
+        finally:
+            client.close()
+
+    def tag_has_usage(self, tag_name: str) -> bool:
+        client = self._client()
+        try:
+            return bool(client.get_resources_by_tag([tag_name]))
+        finally:
+            client.close()
+
+    def delete_tag(self, tag_name: str) -> bool:
+        client = self._client()
+        try:
+            return bool(client.del_tag(tag_name))
+        finally:
+            client.close()
+
     def get_all_tag_paths(self) -> list[str]:
         """Get all possible hierarchical tag paths."""
         client = self._client()

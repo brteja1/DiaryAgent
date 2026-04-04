@@ -165,9 +165,19 @@ This file describes the current implemented behavior of the diary agent in this 
   - `python diary_agent.py tags show <day> <time>`
   - `python diary_agent.py tags apply <day> <time> <tag...>`
   - `python diary_agent.py tags suggest <day> <time>`
+  - `python diary_agent.py tags ls`
+  - `python diary_agent.py tags tree [tag]`
+  - `python diary_agent.py tags delete <tag>`
 - `tags show` prints the HTFS tags for one timestamp section.
 - `tags apply` ensures the provided tags exist in HTFS and then applies them to the section.
 - `tags suggest` asks the configured model to suggest tags from the currently available HTFS tag set.
+- `tags ls` prints the current HTFS tag inventory in flat form.
+- `tags tree` prints the HTFS taxonomy as a hierarchy, optionally rooted at a specific tag.
+- `tags delete` removes a tag from the whole HTFS taxonomy.
+- `tags delete` supports two independent considerations:
+  - whether descendant tags should also be deleted
+  - whether deletion should only proceed when the tags are unused by diary resources
+- `tags delete` requires explicit confirmation before any deletion is performed.
 - HTFS integration operates on timestamp sections, not whole day files.
 - The configured diary path is the HTFS boundary.
 - If `.tagfs.db` is not present in the diary path yet, HTFS metadata is initialized there automatically on first tag use.

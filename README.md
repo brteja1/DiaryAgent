@@ -168,6 +168,9 @@ Examples:
 python diary_agent.py tags show 26_03_2026 14:30
 python diary_agent.py tags apply 26_03_2026 14:30 Project/DiaryAgent Topic/Retrieval
 python diary_agent.py tags suggest 26_03_2026 14:30
+python diary_agent.py tags ls
+python diary_agent.py tags tree Project
+python diary_agent.py tags delete Project --descendants --unused-only --yes
 ```
 
 Behavior:
@@ -175,6 +178,11 @@ Behavior:
 - `tags show` prints the HTFS tags currently attached to one timestamp section.
 - `tags apply` ensures the given tags exist in HTFS and applies them to that section.
 - `tags suggest` uses the configured model to suggest tags from the existing HTFS tag set.
+- `tags ls` prints the flat HTFS tag inventory.
+- `tags tree` prints the HTFS hierarchy and can be rooted at a specific tag.
+- `tags delete` removes a tag from the whole HTFS taxonomy.
+- `tags delete` can recursively include descendants and can be restricted to unused tags only.
+- `tags delete` asks for confirmation unless `--yes` is provided.
 - Section ids are derived internally in the form `dd_mm_yyyy.md#HH:MM`.
 - The configured diary path is the HTFS boundary.
 - If HTFS metadata has not been initialized there yet, Diary Agent initializes it automatically on first tag use.

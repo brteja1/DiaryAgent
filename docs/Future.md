@@ -309,8 +309,16 @@ A plausible future CLI surface:
   show tags for one section
 - `diary_agent tags apply ...`
   manually attach tags
+- `diary_agent tags ls`
+  list the HTFS tag inventory
+- `diary_agent tags tree [tag]`
+  inspect the HTFS hierarchy, optionally rooted at a specific tag
+- `diary_agent tags delete <tag>`
+  remove a tag from the taxonomy, optionally with descendants and unused-only checks
 - `diary_agent related <day> <time>`
   show related tagged sections
+
+The current implementation already exposes the tag inventory, hierarchy view, and taxonomy deletion commands above; future work should build on that surface rather than redefining it.
 
 The regular `search` command should remain the main entrypoint and internally use both text retrieval and HTFS-aware filtering or boosting.
 

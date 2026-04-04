@@ -811,6 +811,121 @@ def run_tags_suggest(agent: DiaryAgent, day_text: str, time_text: str) -> int:
     return 0
 
 
+def run_tags_list(agent: DiaryAgent) -> int:
+    adapter = get_htfs_adapter(agent.diary_dir)
+    tags = adapter.list_tags()
+    if not tags:
+        print("No HTFS tags found.")
+        return 0
+    for tag in tags:
+        print(tag)
+    return 0
+
+
+def run_tags_tree(agent: DiaryAgent, root_tag: str | None = None) -> int:
+    adapter = get_htfs_adapter(agent.diary_dir)
+    available_tags = set(adapter.list_tags())
+    if root_tag is not None and root_tag not in available_tags:
+        print(f"Tag not found: {root_tag}")
+        return 1
+
+    roots = [root_tag] if root_tag else adapter.get_top_level_tags()
+    if not roots:
+        print("No HTFS tags found.")
+        return 0
+
+    visited: set[str] = set()
+
+    def render(tag_name: str, indent: int = 0) -> None:
+        print(f"{'  ' * indent}{tag_name}")
+        if tag_name in visited:
+            return
+        visited.add(tag_name)
+        for child_tag in adapter.get_child_tags(tag_name):
+            render(child_tag, indent + 1)
+
+    for tag_name in roots:
+        render(tag_name)
+    return 0
+
+
+def prompt_yes_no(prompt: str, default: bool = False) -> bool:
+    suffix = "[Y/n]" if default else "[y/N]"
+    while True:
+        try:
+            answer = input(f"{prompt} {suffix}: ").strip().lower()
+        except EOFError:
+            return default
+
+        if not answer:
+            return default
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"n", "no"}:
+            return False
+        print("Please answer y or n.")
+
+
+def run_tags_delete(
+    agent: DiaryAgent,
+    tag_name: str,
+    descendants: bool | None = None,
+    only_unused: bool | None = None,
+    yes: bool = False,
+) -> int:
+    adapter = get_htfs_adapter(agent.diary_dir)
+    available_tags = adapter.list_tags()
+    if tag_name not in available_tags:
+        print(f"Tag not found: {tag_name}")
+        return 1
+
+    if descendants is None:
+        descendants = prompt_yes_no(
+            f"Delete descendant tags under {tag_name} too?",
+            default=False,
+        ) if sys.stdin.isatty() else False
+
+    if only_unused is None:
+        only_unused = prompt_yes_no(
+            "Only delete tags that are unused?",
+            default=False,
+        ) if sys.stdin.isatty() else False
+
+    delete_order = adapter.get_tag_descendants(tag_name) if descendants else []
+    delete_order.append(tag_name)
+
+    if only_unused:
+        used_tags = [name for name in delete_order if adapter.tag_has_usage(name)]
+        if used_tags:
+            print(
+                "Cannot delete tags that are still used by diary resources:"
+                f" {', '.join(used_tags)}"
+            )
+            return 1
+
+    if not yes and not sys.stdin.isatty():
+        print("Refusing to delete tags without a TTY. Re-run with --yes to confirm.")
+        return 1
+
+    summary = f"Delete tag {tag_name}"
+    if descendants:
+        summary += f" and {len(delete_order) - 1} descendant(s)"
+    if not yes and not prompt_yes_no(summary, default=False):
+        print("Aborted.")
+        return 0
+
+    deleted: list[str] = []
+    for current_tag in delete_order:
+        if adapter.delete_tag(current_tag):
+            deleted.append(current_tag)
+        else:
+            print(f"Failed to delete tag: {current_tag}")
+            return 1
+
+    print(f"Deleted {len(deleted)} tag(s): {', '.join(deleted)}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Offline diary agent powered by Ollama.",
@@ -858,6 +973,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tags_subparsers = tags_parser.add_subparsers(dest="tags_command", required=True)
 
+    tags_ls_parser = tags_subparsers.add_parser(
+        "ls",
+        aliases=["list"],
+        help="List all HTFS tags.",
+    )
+
+    tags_tree_parser = tags_subparsers.add_parser(
+        "tree",
+        help="Show HTFS tags as a hierarchy.",
+    )
+    tags_tree_parser.add_argument(
+        "tag",
+        nargs="?",
+        help="Optional root tag to show a subtree.",
+    )
+
     tags_show_parser = tags_subparsers.add_parser(
         "show",
         help="Show HTFS tags for a specific diary section.",
@@ -879,6 +1010,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tags_suggest_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
     tags_suggest_parser.add_argument("time", help="Section time in HH:MM format.")
+
+    tags_delete_parser = tags_subparsers.add_parser(
+        "delete",
+        help="Delete a tag from the HTFS taxonomy.",
+    )
+    tags_delete_parser.add_argument("tag", help="HTFS tag to delete.")
+    tags_delete_parser.add_argument(
+        "--descendants",
+        action="store_true",
+        default=None,
+        help="Delete descendant tags as well.",
+    )
+    tags_delete_parser.add_argument(
+        "--unused-only",
+        action="store_true",
+        default=None,
+        help="Only delete tags that are unused by diary resources.",
+    )
+    tags_delete_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the final confirmation prompt.",
+    )
     return parser
 
 
@@ -903,12 +1057,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_todos(agent)
         if command == "tags":
             tags_command = args.tags_command
+            if tags_command in {"ls", "list"}:
+                return run_tags_list(agent)
+            if tags_command == "tree":
+                return run_tags_tree(agent, args.tag)
             if tags_command == "show":
                 return run_tags_show(agent, args.day, args.time)
             if tags_command == "apply":
                 return run_tags_apply(agent, args.day, args.time, args.tags)
             if tags_command == "suggest":
                 return run_tags_suggest(agent, args.day, args.time)
+            if tags_command == "delete":
+                return run_tags_delete(
+                    agent,
+                    args.tag,
+                    descendants=args.descendants,
+                    only_unused=args.unused_only,
+                    yes=args.yes,
+                )
         parser.error(f"Unknown command: {command}")
     except KeyboardInterrupt:
         print("\nAborted.")

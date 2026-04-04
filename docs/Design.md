@@ -249,6 +249,31 @@ Implementation note:
 
 - The nested editor and tag-management dialogs are launched in an event-loop-safe way so the show screen can invoke them without tripping over the active prompt_toolkit application context.
 
+## HTFS Tag Commands
+
+The `tags` command covers both section-level inspection and taxonomy management:
+
+```bash
+python diary_agent.py tags show 26_03_2026 14:30
+python diary_agent.py tags apply 26_03_2026 14:30 Project/DiaryAgent Topic/Retrieval
+python diary_agent.py tags suggest 26_03_2026 14:30
+python diary_agent.py tags ls
+python diary_agent.py tags tree Project
+python diary_agent.py tags delete Project --descendants --unused-only --yes
+```
+
+Deletion behavior is intentionally explicit:
+
+- `tags delete` removes a tag from the whole HTFS taxonomy.
+- `--descendants` makes deletion recursive over child tags.
+- `--unused-only` blocks deletion if the selected tags are still used by diary resources.
+- `--yes` skips the final confirmation prompt for scripted use.
+
+Inspection helpers are intentionally lightweight:
+
+- `tags ls` prints the flat HTFS tag inventory.
+- `tags tree` prints the hierarchy, and can be rooted at a specific tag to inspect a subtree before deletion.
+
 ## Search Flow
 
 The `search` command retrieves local text excerpts using token overlap scoring and then asks the LLM to answer using only those excerpts.
