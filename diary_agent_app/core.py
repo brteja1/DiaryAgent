@@ -38,10 +38,10 @@ def parse_config_text(text: str) -> dict[str, str]:
     return values
 
 
-def write_config(config_path: Path, diary_dir: Path, llm_model: str) -> None:
+def write_config(config_path: Path, diary_dir: Path, llm_model: str, htfs_path: Path) -> None:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
-        f"diary_path={diary_dir}\nllm_model={llm_model}\n",
+        f"diary_path={diary_dir}\nllm_model={llm_model}\nhtfs_path={htfs_path}\n",
         encoding="utf-8",
     )
 
@@ -50,11 +50,11 @@ def prompt_for_config_entries(config_path: Path, stdin=None) -> AppConfig:
     stdin = stdin if stdin is not None else sys.stdin
     if not stdin.isatty():
         raise RuntimeError(
-            f"Missing or invalid config at {config_path}. Create it with 'diary_path=' and 'llm_model=' entries."
+            f"Missing or invalid config at {config_path}. Create it with 'diary_path=', 'llm_model=', and 'htfs_path=' entries."
         )
 
     print(f"Config file required: {config_path}")
-    print("Populate the diary storage location and Ollama model to continue.")
+    print("Populate the diary storage location, Ollama model, and HTFS project path to continue.")
     while True:
         diary_answer = input("Diary folder path: ").strip()
         if not diary_answer:
@@ -64,9 +64,14 @@ def prompt_for_config_entries(config_path: Path, stdin=None) -> AppConfig:
         if not model_answer:
             print("LLM model name is required.")
             continue
+        htfs_answer = input("HTFS project path: ").strip()
+        if not htfs_answer:
+            print("HTFS project path is required.")
+            continue
         diary_dir = Path(diary_answer).expanduser()
-        write_config(config_path, diary_dir, model_answer)
-        return AppConfig(diary_dir=diary_dir, llm_model=model_answer)
+        htfs_path = Path(htfs_answer).expanduser()
+        write_config(config_path, diary_dir, model_answer, htfs_path)
+        return AppConfig(diary_dir=diary_dir, llm_model=model_answer, htfs_path=htfs_path)
 
 
 def load_or_initialize_config(home: Path | None = None, stdin=None) -> AppConfig:
@@ -77,12 +82,14 @@ def load_or_initialize_config(home: Path | None = None, stdin=None) -> AppConfig
     values = parse_config_text(config_path.read_text(encoding="utf-8"))
     diary_path = values.get("diary_path", "").strip()
     llm_model = values.get("llm_model", "").strip()
-    if not diary_path or not llm_model:
+    htfs_path = values.get("htfs_path", "").strip()
+    if not diary_path or not llm_model or not htfs_path:
         return prompt_for_config_entries(config_path, stdin=stdin)
 
     return AppConfig(
         diary_dir=Path(diary_path).expanduser(),
         llm_model=llm_model,
+        htfs_path=Path(htfs_path).expanduser(),
     )
 
 

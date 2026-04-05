@@ -65,6 +65,7 @@ Required entries:
 ```text
 diary_path=/path/to/your/diary
 llm_model=llama3
+htfs_path=/path/to/HTFS
 ```
 
 Example:
@@ -72,12 +73,14 @@ Example:
 ```text
 diary_path=~/Diary
 llm_model=qwen2.5
+htfs_path=~/HTFS
 ```
 
 Notes:
 
 - `diary_path` is where daily Markdown files are stored.
 - `llm_model` must match a model available in your local Ollama instance.
+- `htfs_path` must point to the local HTFS checkout that provides the Python package.
 - If the config file is missing during an interactive run, the app will prompt you and create it.
 - In non-interactive mode, missing or invalid config causes the app to exit with an error.
 
@@ -145,6 +148,7 @@ python diary_agent.py show "05_03_2026"
 Behavior:
 
 - With no argument, `show` opens today's diary entry.
+- If today's entry is missing, `show` offers to open the most recent available entry instead.
 - If a day is provided, it must use `dd_mm_yyyy` format.
 - Any other format is rejected with an error.
 - The matching diary entry is shown exactly as stored.

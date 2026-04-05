@@ -30,8 +30,9 @@ This file describes the current implemented behavior of the diary agent in this 
 - Current required config entries:
   - `diary_path=/path/to/diary/folder`
   - `llm_model=model_name_available_in_ollama`
+  - `htfs_path=/path/to/htfs/project`
 - If the config file is missing, or either required entry is missing/empty:
-  - Interactive terminal run: the agent prompts the user for the diary folder path and writes the config file.
+  - Interactive terminal run: the agent prompts the user for the diary folder path, Ollama model, and HTFS project path, then writes the config file.
   - Non-interactive run: the agent exits with a clear error.
 
 ## File Management
@@ -128,6 +129,7 @@ This file describes the current implemented behavior of the diary agent in this 
   - `python diary_agent.py show`
   - `python diary_agent.py show "dd_mm_yyyy"`
 - If `show` is run without an argument, it defaults to today's date.
+- If today's diary file does not exist, the command offers to open the most recent available diary entry instead.
 - If a day argument is provided, it must match `dd_mm_yyyy`; other formats are rejected with a clear error.
 - If the target diary file does not exist, the command reports that no entry was found.
 - With `prompt_toolkit` available, the entry opens in a full-screen read-only viewer.

@@ -25,6 +25,7 @@ class SimilarTodoMatch:
 class AppConfig:
     diary_dir: Path
     llm_model: str
+    htfs_path: Path
 
 
 @dataclass(frozen=True)

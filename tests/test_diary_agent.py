@@ -35,7 +35,7 @@ def test_load_or_initialize_config_reads_required_entries(monkeypatch, tmp_path)
     config_path = fake_home / ".config" / "diary_agent" / "config.txt"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(
-        "diary_path=~/journal\nllm_model=qwen2.5\n",
+        "diary_path=~/journal\nllm_model=qwen2.5\nhtfs_path=~/HTFS\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(diary_agent.Path, "home", lambda: fake_home)
@@ -45,18 +45,35 @@ def test_load_or_initialize_config_reads_required_entries(monkeypatch, tmp_path)
 
     assert config.diary_dir == fake_home / "journal"
     assert config.llm_model == "qwen2.5"
+    assert config.htfs_path == fake_home / "HTFS"
 
 
 def test_load_or_initialize_config_non_interactive_missing_values_raises(monkeypatch, tmp_path):
     fake_home = tmp_path / "home"
     config_path = fake_home / ".config" / "diary_agent" / "config.txt"
     config_path.parent.mkdir(parents=True)
-    config_path.write_text("diary_path=\nllm_model=\n", encoding="utf-8")
+    config_path.write_text("diary_path=\nllm_model=\nhtfs_path=\n", encoding="utf-8")
     monkeypatch.setattr(diary_agent.Path, "home", lambda: fake_home)
     monkeypatch.setattr(diary_agent.sys.stdin, "isatty", lambda: False)
 
     with pytest.raises(RuntimeError, match="Missing or invalid config"):
         diary_agent.load_or_initialize_config()
+
+
+def test_write_config_includes_htfs_path(tmp_path):
+    config_path = tmp_path / "config.txt"
+    diary_agent.write_config(
+        config_path,
+        tmp_path / "journal",
+        "qwen2.5",
+        tmp_path / "HTFS",
+    )
+
+    assert config_path.read_text(encoding="utf-8") == (
+        f"diary_path={tmp_path / 'journal'}\n"
+        f"llm_model=qwen2.5\n"
+        f"htfs_path={tmp_path / 'HTFS'}\n"
+    )
 
 
 def test_ensure_storage_creates_configured_diary_directory(tmp_path):
@@ -402,7 +419,7 @@ def test_run_tags_show_prints_section_tags(monkeypatch, tmp_path, capsys):
         def get_all_tag_paths(self):
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_show(agent, "26_03_2026", "14:30")
 
@@ -436,7 +453,7 @@ def test_run_tags_apply_creates_and_applies_tags(monkeypatch, tmp_path, capsys):
         def get_all_tag_paths(self):
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_apply(
         agent,
@@ -476,7 +493,7 @@ def test_run_tags_suggest_uses_available_htfs_tags(monkeypatch, tmp_path, capsys
         def get_all_tag_paths(self):
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_suggest(agent, "26_03_2026", "14:30")
 
@@ -491,7 +508,7 @@ def test_run_tags_list_prints_all_tags(monkeypatch, tmp_path, capsys):
         def list_tags(self):
             return ["Area", "Project", "Topic"]
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_list(agent)
 
@@ -518,7 +535,7 @@ def test_run_tags_tree_prints_hierarchy(monkeypatch, tmp_path, capsys):
                 "Retrieval": [],
             }.get(tag_name, [])
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_tree(agent)
 
@@ -545,7 +562,7 @@ def test_run_tags_tree_rejects_missing_root(monkeypatch, tmp_path, capsys):
         def get_child_tags(self, tag_name):
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_tree(agent, root_tag="Missing")
 
@@ -573,7 +590,7 @@ def test_run_tags_delete_recursively_deletes_descendants_first(monkeypatch, tmp_
             deleted.append(tag_name)
             return True
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_delete(
         agent,
@@ -607,7 +624,7 @@ def test_run_tags_delete_blocks_when_tags_are_used(monkeypatch, tmp_path, capsys
             deleted.append(tag_name)
             return True
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_delete(
         agent,
@@ -699,7 +716,7 @@ def test_run_capture_interactive_exposes_rewrite_callback_and_saves_final_edit_v
         def get_all_tag_paths(self):
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
     monkeypatch.setattr(
         agent,
         "append_entry_verbatim",
@@ -757,7 +774,7 @@ def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_dra
         def get_all_tag_paths(self):
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
     monkeypatch.setattr(agent, "append_entry_verbatim", lambda entry: (tmp_path / "26_03_2026.md", True))
     monkeypatch.setattr(
         agent,
@@ -818,7 +835,7 @@ def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, 
             recorded["tagged"] = list(tags)
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_capture(agent)
 
@@ -869,6 +886,83 @@ def test_launch_editor_uses_thread_mode_when_called_from_async_context(monkeypat
 
     assert captured["in_thread"] is True
     assert result == ("edited text", [])
+
+
+def test_prompt_for_section_tags_uses_thread_mode_when_called_from_async_context(monkeypatch):
+    captured = {}
+
+    class FakeSession:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def prompt(self, *args, **kwargs):
+            captured["in_thread"] = kwargs.get("in_thread")
+            return "Project/DiaryAgent"
+
+    monkeypatch.setattr(ui, "require_prompt_toolkit", lambda: None)
+    monkeypatch.setattr(ui, "PromptSession", FakeSession)
+
+    async def call_prompt():
+        return ui.prompt_for_section_tags(
+            ["Project/DiaryAgent"],
+            ["Project"],
+            ["Project/DiaryAgent"],
+        )
+
+    result = asyncio.run(call_prompt())
+
+    assert captured["in_thread"] is True
+    assert result == ["Project/DiaryAgent"]
+
+
+def test_comma_separated_tag_completer_completes_after_commas():
+    if not hasattr(ui, "_CommaSeparatedTagCompleter") or ui._CommaSeparatedTagCompleter is None:
+        pytest.skip("prompt_toolkit not available")
+
+    completer = ui._CommaSeparatedTagCompleter(
+        ["Project/DiaryAgent", "Topic/Personal", "Topic/Work"]
+    )
+
+    class FakeDocument:
+        def __init__(self, text_before_cursor):
+            self.text_before_cursor = text_before_cursor
+
+    first = list(completer.get_completions(FakeDocument("To"), None))
+    second = list(completer.get_completions(FakeDocument("Project/DiaryAgent, To"), None))
+    exact = list(completer.get_completions(FakeDocument("Project/DiaryAgent, "), None))
+
+    assert [c.text for c in first] == ["Topic/Personal", "Topic/Work"]
+    assert [c.text for c in second] == ["Topic/Personal", "Topic/Work"]
+    assert [c.text for c in exact] == ["Project/DiaryAgent", "Topic/Personal", "Topic/Work"]
+    assert all(c.start_position == -2 for c in second)
+
+
+def test_confirm_similar_todo_addition_uses_thread_mode(monkeypatch):
+    captured = {}
+
+    class FakeDialog:
+        def run(self, *args, **kwargs):
+            captured["in_thread"] = kwargs.get("in_thread")
+            return True
+
+    monkeypatch.setattr(ui, "require_prompt_toolkit", lambda: None)
+    monkeypatch.setattr(ui, "button_dialog", lambda *args, **kwargs: FakeDialog())
+
+    async def call_confirm():
+        match = diary_agent.SimilarTodoMatch(
+            candidate_text="Call Alice",
+            existing_task=diary_agent.PendingTask(
+                file_path=Path("25_03_2026.md"),
+                line_number=3,
+                text="Call Alice back",
+            ),
+        )
+        return ui.confirm_similar_todo_addition(match)
+
+    result = asyncio.run(call_confirm())
+
+    assert result is True
+    assert captured["in_thread"] is True
 
 
 def test_synthesize_entry_strips_headings_and_preserves_nested_bullets(monkeypatch):
@@ -1136,6 +1230,52 @@ def test_run_show_day_defaults_to_today_when_day_omitted(monkeypatch, tmp_path):
     }
 
 
+def test_run_show_day_asks_to_show_latest_entry_when_today_missing(monkeypatch, tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    today = dt.date(2026, 4, 5)
+    older = tmp_path / "31_03_2026.md"
+    latest = tmp_path / "01_04_2026.md"
+    older.write_text("- Older entry\n", encoding="utf-8")
+    latest.write_text("- Most recent entry\n", encoding="utf-8")
+    monkeypatch.setattr(agent, "ensure_storage", lambda: None)
+
+    class FixedDate(dt.date):
+        @classmethod
+        def today(cls):
+            return today
+
+    monkeypatch.setattr(diary_agent.dt, "date", FixedDate)
+    asked = {}
+    monkeypatch.setattr(
+        diary_agent,
+        "confirm_show_latest_entry",
+        lambda requested_title, latest_title: asked.update(
+            {"requested": requested_title, "latest": latest_title}
+        )
+        or True,
+    )
+    shown = {}
+    monkeypatch.setattr(
+        diary_agent,
+        "show_diary_entry",
+        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None, get_tags=None, toggle_todo=None, **kwargs: shown.update(
+            {"title": title, "body": body}
+        ),
+    )
+
+    exit_code = diary_agent.run_show_day(agent)
+
+    assert exit_code == 0
+    assert asked == {
+        "requested": "05_04_2026",
+        "latest": "01_04_2026",
+    }
+    assert shown == {
+        "title": "01_04_2026.md",
+        "body": "- Most recent entry",
+    }
+
+
 def test_run_show_day_wires_htfs_callbacks(monkeypatch, tmp_path):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
     target = tmp_path / "05_03_2026.md"
@@ -1159,7 +1299,7 @@ def test_run_show_day_wires_htfs_callbacks(monkeypatch, tmp_path):
             adapter_calls["all_paths"] = True
             return ["Project/DiaryAgent", "Topic/Retrieval"]
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     shown = {}
 
@@ -1263,7 +1403,7 @@ def test_run_tags_show_prints_all_sections_tags_when_time_is_none(monkeypatch, t
         def get_all_tag_paths(self):
             return []
 
-    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda _diary_dir: FakeAdapter())
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
 
     exit_code = diary_agent.run_tags_show(agent, "26_03_2026", None)
 

@@ -10,8 +10,9 @@ from .models import DiarySection
 class HTFSAdapter:
     """Small boundary-aware adapter between DiaryAgent sections and HTFS resources."""
 
-    def __init__(self, boundary: Path) -> None:
+    def __init__(self, boundary: Path, import_path: Path | None = None) -> None:
         self.boundary = boundary.resolve()
+        self.import_path = (import_path or Path("/linuxdev/github/HTFS")).expanduser().resolve()
 
     @property
     def sqlite_path(self) -> Path:
@@ -55,11 +56,12 @@ class HTFSAdapter:
 
     def _client(self):
         try:
-            if "/linuxdev/github/HTFS" not in sys.path:
-                sys.path.insert(0, "/linuxdev/github/HTFS")
+            import_path_text = str(self.import_path)
+            if import_path_text not in sys.path:
+                sys.path.insert(0, import_path_text)
             from htfs import HTFS  # type: ignore
         except ImportError as exc:  # pragma: no cover - environment boundary
-            raise RuntimeError("HTFS is not importable from /linuxdev/github/HTFS") from exc
+            raise RuntimeError(f"HTFS is not importable from {self.import_path}") from exc
         return HTFS(str(self.boundary))
 
     def add_tags(self, tags: Iterable[str]) -> list[str]:

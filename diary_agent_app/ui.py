@@ -16,7 +16,7 @@ try:
     from prompt_toolkit.filters import Condition
     from prompt_toolkit.widgets import Box, Frame, TextArea, CheckboxList
     from prompt_toolkit import PromptSession
-    from prompt_toolkit.completion import WordCompleter
+    from prompt_toolkit.completion import Completer, Completion
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.shortcuts import button_dialog, checkboxlist_dialog, message_dialog
@@ -34,7 +34,8 @@ except ImportError:  # pragma: no cover - runtime dependency
     TextArea = None
     CheckboxList = None
     PromptSession = None
-    WordCompleter = None
+    Completer = None
+    Completion = None
     HTML = None
     KeyBindings = None
     button_dialog = None
@@ -121,7 +122,7 @@ def confirm_similar_todo_addition(match: SimilarTodoMatch) -> bool:
             ("Skip", False),
         ],
         style=DIALOG_STYLE,
-    ).run()
+    ).run(in_thread=_prompt_should_run_in_thread())
     return bool(result)
 
 
@@ -143,6 +144,61 @@ def confirm_similar_todo_addition_cli(match: SimilarTodoMatch, stdin=None) -> bo
         print("Please answer y or n.")
 
 
+def confirm_show_latest_entry(requested_title: str, latest_title: str) -> bool:
+    require_prompt_toolkit()
+    result = button_dialog(
+        title="No Entry For Today",
+        text=(
+            f"No diary entry was found for {requested_title}.\n\n"
+            f"The most recent entry is {latest_title}.\n\n"
+            "Do you want to show that entry instead?"
+        ),
+        buttons=[
+            ("Show Latest", True),
+            ("Cancel", False),
+        ],
+        style=DIALOG_STYLE,
+    ).run(in_thread=_prompt_should_run_in_thread())
+    return bool(result)
+
+
+def confirm_show_latest_entry_cli(requested_title: str, latest_title: str, stdin=None) -> bool:
+    stdin = stdin if stdin is not None else sys.stdin
+    if not stdin.isatty():
+        return False
+
+    print(f"\nNo diary entry was found for {requested_title}.")
+    print(f"The most recent entry is {latest_title}.")
+    while True:
+        answer = input("Show that entry instead? [y/N]: ").strip().lower()
+        if answer in {"", "n", "no"}:
+            return False
+        if answer in {"y", "yes"}:
+            return True
+        print("Please answer y or n.")
+
+
+if Completer is not None:
+    class _CommaSeparatedTagCompleter(Completer):
+        def __init__(self, words: Sequence[str]) -> None:
+            self._words = list(words)
+
+        def get_completions(self, document, complete_event):
+            text_before_cursor = document.text_before_cursor
+            last_comma = text_before_cursor.rfind(",")
+            fragment = text_before_cursor[last_comma + 1 :] if last_comma >= 0 else text_before_cursor
+            stripped_fragment = fragment.lstrip()
+            start_position = -len(stripped_fragment)
+            fragment_lower = stripped_fragment.lower()
+
+            for word in self._words:
+                if fragment_lower and not word.lower().startswith(fragment_lower):
+                    continue
+                yield Completion(word, start_position=start_position)
+else:
+    _CommaSeparatedTagCompleter = None
+
+
 def prompt_for_section_tags(
     all_tags: Sequence[str],
     top_level_tags: Sequence[str],
@@ -153,6 +209,7 @@ def prompt_for_section_tags(
     unique_tags = sorted(dict.fromkeys(all_tags))
     unique_paths = sorted(dict.fromkeys(all_paths))
     all_suggestions = sorted(list(set(unique_tags + unique_paths)))
+    tag_completer = _CommaSeparatedTagCompleter(all_suggestions) if _CommaSeparatedTagCompleter is not None else None
 
     try:
         require_prompt_toolkit()
@@ -174,7 +231,7 @@ def prompt_for_section_tags(
             height=3,
             prompt="Tags (comma separated)> ",
             multiline=True,
-            completer=WordCompleter(all_suggestions, ignore_case=True, sentence=True),
+            completer=tag_completer,
             complete_while_typing=True,
         )
 
@@ -238,7 +295,7 @@ def prompt_for_section_tags(
                     ("No", False),
                 ],
                 style=DIALOG_STYLE,
-            ).run()
+            ).run(in_thread=_prompt_should_run_in_thread())
 
             if confirm:
                 final_tags.extend(new_tags_to_confirm)
@@ -260,10 +317,13 @@ def prompt_for_section_tags(
 
         print("Enter tags separated by commas (e.g., Topic/AI, People/Alice), or press Enter to skip.")
         if PromptSession is not None:
-            completer = WordCompleter(all_suggestions, ignore_case=True, sentence=True)
-            session = PromptSession(completer=completer)
+            session = PromptSession(completer=tag_completer)
             try:
-                raw_value = session.prompt(prompt_text, complete_while_typing=True)
+                raw_value = session.prompt(
+                    prompt_text,
+                    complete_while_typing=True,
+                    in_thread=_prompt_should_run_in_thread(),
+                )
             except (EOFError, KeyboardInterrupt):
                 return []
         else:
