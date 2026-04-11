@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Sequence
 
+from .models import SearchResult
+
 
 try:
     import ollama
@@ -76,14 +78,19 @@ def strip_generated_headings(text: str) -> str:
     return "\n".join(filtered_lines).strip()
 
 
-def answer_query(model: str, query: str, matches: Sequence[tuple[Path, str, int]]) -> str:
+def answer_query(model: str, query: str, matches: Sequence[SearchResult]) -> str:
     require_ollama()
     if not matches:
         return "No relevant diary history found."
 
     excerpts = "\n\n".join(
-        f"File: {path.name}\nExcerpt:\n{snippet}"
-        for path, snippet, _score in matches
+        (
+            f"File: {match.file_path.name}"
+            + (f"\nSection: {match.section_id}" if match.section_id else "")
+            + (f"\nTags: {', '.join(match.section_tags)}" if match.section_tags else "")
+            + f"\nExcerpt:\n{match.snippet}"
+        )
+        for match in matches
     )
     try:
         response = ollama.chat(
@@ -93,6 +100,7 @@ def answer_query(model: str, query: str, matches: Sequence[tuple[Path, str, int]
                     "role": "system",
                     "content": (
                         "You answer questions about diary history using only the supplied excerpts. "
+                        "Use section tags as additional context when they are provided. "
                         "Be concise, cite file names inline, and say when the excerpts are insufficient."
                     ),
                 },
@@ -104,6 +112,46 @@ def answer_query(model: str, query: str, matches: Sequence[tuple[Path, str, int]
         )
     except Exception as exc:
         raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
+    return response["message"]["content"].strip()
+
+
+def tag_expression_from_natural_language(
+    model: str,
+    request: str,
+    available_tags: Sequence[str],
+) -> str:
+    require_ollama()
+    if not available_tags:
+        return ""
+
+    try:
+        response = ollama.chat(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You convert a natural-language request into an HTFS tag expression. "
+                        "Use only the provided tags. "
+                        "HTFS expressions use &, |, ~, and parentheses. "
+                        "Return only a valid tag expression. "
+                        "If none of the provided tags fit, return an empty string."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Available tags:\n"
+                        + "\n".join(available_tags)
+                        + "\n\nRequest:\n"
+                        + request.strip()
+                    ),
+                },
+            ],
+        )
+    except Exception as exc:
+        raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
+
     return response["message"]["content"].strip()
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import re
 import sys
 from collections.abc import Callable, Sequence
 
@@ -63,6 +64,8 @@ DIALOG_STYLE = (
     if Style is not None
     else None
 )
+
+SHOW_SECTION_HEADING_RE = re.compile(r"^## (?P<heading>\d{2}:\d{2}(?::[1-9]\d*)?)(?:\s|$)")
 
 
 def require_prompt_toolkit() -> None:
@@ -485,6 +488,7 @@ def show_diary_entry(
     set_tags=None,
     get_all_tags=None,
     suggest_tags=None,
+    delete_section=None,
 ) -> None:
     require_prompt_toolkit()
 
@@ -493,39 +497,39 @@ def show_diary_entry(
             return content
         lines = content.splitlines()
         for i, line in enumerate(lines):
-            # Matches '## HH:MM'
-            if line.startswith("## ") and len(line.strip()) == 8:
-                heading = line.strip()[3:]
-                tags = tags_data.get(heading, [])
-                if tags:
-                    lines[i] = f"{line.rstrip()} {{{', '.join(tags)}}}"
+            heading_match = SHOW_SECTION_HEADING_RE.match(line.strip())
+            if not heading_match:
+                continue
+            heading = heading_match.group("heading")
+            tags = tags_data.get(heading, [])
+            if tags:
+                lines[i] = f"## {heading} {{{', '.join(tags)}}}"
         return "\n".join(lines)
 
     def get_current_section(content, line_no):
         lines = content.splitlines()
-        current_heading = None
-        current_body_lines = []
-        
-        # Traverse backwards to find the heading
+        heading_line_index = None
+
+        # Traverse backwards to find the containing heading.
         for i in range(line_no - 1, -1, -1):
-            if lines[i].startswith("## ") and len(lines[i].strip()) >= 8:
-                current_heading = lines[i].strip()[3:8] # Extract HH:MM
+            if SHOW_SECTION_HEADING_RE.match(lines[i].strip()):
+                heading_line_index = i
                 break
-        
-        if not current_heading:
+
+        if heading_line_index is None:
             return None, ""
-            
-        # Traverse forwards from the heading to find the next heading or EOF
-        found_heading = False
-        for i, line in enumerate(lines):
-            if line.startswith(f"## {current_heading}"):
-                found_heading = True
-                continue
-            if found_heading:
-                if line.startswith("## ") and len(line.strip()) >= 8:
-                    break
-                current_body_lines.append(line)
-                
+
+        heading_match = SHOW_SECTION_HEADING_RE.match(lines[heading_line_index].strip())
+        if not heading_match:
+            return None, ""
+        current_heading = heading_match.group("heading")
+
+        current_body_lines = []
+        for i in range(heading_line_index + 1, len(lines)):
+            if SHOW_SECTION_HEADING_RE.match(lines[i].strip()):
+                break
+            current_body_lines.append(lines[i])
+
         return current_heading, "\n".join(current_body_lines).strip()
 
     current_tags = get_tags(title) if get_tags else {}
@@ -561,6 +565,7 @@ def show_diary_entry(
             "<b>Toggle TODO:</b> Space  "
             "<b>Edit:</b> e  "
             "<b>Tags:</b> t  "
+            "<b>Delete:</b> d  "
             "<b>Exit:</b> q / Esc"
         )
 
@@ -737,6 +742,36 @@ def show_diary_entry(
         if new_tags is not None and new_tags != current_section_tags:
             set_tags(frame.title, heading, new_tags)
             update_view(frame.title, raw_content_state["body"])
+
+    @bindings.add("d", filter=~picker_visible)
+    async def _(event) -> None:
+        if delete_section is None:
+            return
+        line_no = text_area.buffer.document.cursor_position_row + 1
+        heading, _ = get_current_section(raw_content_state["body"], line_no)
+        if not heading:
+            return
+
+        confirmed = await run_in_terminal(
+            lambda: button_dialog(
+                title="Delete Section",
+                text=(
+                    f"Delete section {heading} from {frame.title}?\n\n"
+                    "This also removes its HTFS resource and tags."
+                ),
+                buttons=[
+                    ("Delete", True),
+                    ("Cancel", False),
+                ],
+                style=DIALOG_STYLE,
+            ).run(in_thread=_prompt_should_run_in_thread())
+        )
+        if not confirmed:
+            return
+
+        updated_content = delete_section(frame.title, heading)
+        if updated_content is not None:
+            update_view(frame.title, updated_content)
 
     query_input.buffer.on_text_changed += lambda _event: (
         picker_state.__setitem__("selected", 0)

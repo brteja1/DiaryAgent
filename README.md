@@ -64,7 +64,6 @@ Required entries:
 
 ```text
 diary_path=/path/to/your/diary
-llm_model=llama3
 htfs_path=/path/to/HTFS
 ```
 
@@ -72,14 +71,14 @@ Example:
 
 ```text
 diary_path=~/Diary
-llm_model=qwen2.5
 htfs_path=~/HTFS
 ```
 
 Notes:
 
 - `diary_path` is where daily Markdown files are stored.
-- `llm_model` must match a model available in your local Ollama instance.
+- `llm_model` is optional. When omitted, LLM-backed rewrite, tag suggestion, TODO similarity, and answer synthesis stay disabled.
+- If `llm_model` is present, it must match a model available in your local Ollama instance.
 - `htfs_path` must point to the local HTFS checkout that provides the Python package.
 - If the config file is missing during an interactive run, the app will prompt you and create it.
 - In non-interactive mode, missing or invalid config causes the app to exit with an error.
@@ -130,13 +129,20 @@ This is useful for scripts, aliases, or quick terminal logging.
 
 ```bash
 python diary_agent.py search "What did I note about the login bug?"
+python diary_agent.py search --tags "project diary agent" "login bug"
+python diary_agent.py search --tags "Project&Topic/Retrieval"
 ```
 
 Behavior:
 
-- The app retrieves relevant excerpts from diary files.
+- The app retrieves relevant excerpts from diary files and matches against section tags.
+- Matching excerpts include HTFS section tags when available.
+- `--tags` optionally narrows the search to matching HTFS sections.
+- With a configured model, `--tags` can be a natural-language description that is translated into an HTFS tag expression using the current tag inventory.
+- Without a configured model, `--tags` must already be a valid HTFS tag expression using `&`, `|`, `~`, and parentheses.
 - Ollama answers using only those excerpts.
 - Matching excerpts are printed after the answer.
+- If the configured model is unavailable, the app warns and falls back to basic text search results with section tags.
 
 ### Show A Day
 
@@ -153,7 +159,8 @@ Behavior:
 - Any other format is rejected with an error.
 - The matching diary entry is shown exactly as stored.
 - If `prompt_toolkit` is available, the entry opens in a scrollable terminal viewer.
-- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, `g` to fuzzy-pick another existing entry, `e` to edit the current timestamp section, `t` to manage tags for that section, and exits with `q`, `Esc`, or `Ctrl+C`.
+- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, `g` to fuzzy-pick another existing entry, `e` to edit the current timestamp section, `t` to manage tags for that section, `d` to delete the current timestamp section (with confirmation), and exits with `q`, `Esc`, or `Ctrl+C`.
+- Deleting a timestamp section from the show viewer also removes the corresponding HTFS section resource and its tags.
 - If `prompt_toolkit` is unavailable, the stored entry is printed to stdout.
 
 ### Show A Specific Day
@@ -188,6 +195,7 @@ Behavior:
 - `tags delete` can recursively include descendants and can be restricted to unused tags only.
 - `tags delete` asks for confirmation unless `--yes` is provided.
 - Section ids are derived internally in the form `dd_mm_yyyy.md#HH:MM`.
+- If multiple updates are captured in the same minute, later sections use `dd_mm_yyyy.md#HH:MM:<serial>` (for example `dd_mm_yyyy.md#14:30:2`).
 - The configured diary path is the HTFS boundary.
 - If HTFS metadata has not been initialized there yet, Diary Agent initializes it automatically on first tag use.
 - Hierarchical tags are passed to HTFS exactly as entered.
@@ -219,6 +227,18 @@ Generated notes are grouped under time-based Markdown headings:
 
 - Finished the payment reconciliation task.
 - [ ] Follow up with the design team about the dashboard mockups.
+```
+
+If more than one update lands in the same minute, headings are disambiguated with a serial suffix:
+
+```markdown
+## 14:30
+
+- First update in that minute.
+
+## 14:30:2
+
+- Second update in the same minute.
 ```
 
 If a note naturally contains sub-points, nested bullets are retained:

@@ -9,18 +9,19 @@ This file describes the current implemented behavior of the diary agent in this 
 - Local model integration: uses the Python `ollama` client for text generation, history-answer synthesis, semantic TODO classification, and semantic TODO similarity checks.
 - Terminal UI: uses `prompt_toolkit` for multiline input and dialog-based prompts (optional - CLI fallbacks available).
 - Expected runtime environment:
-  - Ollama must be installed and reachable from the machine running the script.
-  - The configured model must already be available in Ollama.
-  - `ollama` Python package must be installed.
+  - Ollama must be installed and reachable from the machine running the script when LLM-backed features are enabled.
+  - The configured model must already be available in Ollama when `llm_model` is set.
+  - `ollama` Python package must be installed for LLM-backed features.
   - `prompt_toolkit` Python package is optional (CLI fallbacks used if unavailable).
   - A user config file at `~/.config/diary_agent/config.txt` is required for normal operation.
 
 ## Model Behavior
 
 - The agent uses a configurable Ollama model through:
-  - required config entry: `llm_model=...`
+  - optional config entry: `llm_model=...`
   - optional CLI override: `--model`
 - The primary source of truth is the config file, not a hardcoded Python default.
+- If `llm_model` is omitted and no CLI override is supplied, the agent runs in no-LLM mode.
 
 ## Configuration
 
@@ -29,10 +30,11 @@ This file describes the current implemented behavior of the diary agent in this 
   - `~/.config/diary_agent/config.txt`
 - Current required config entries:
   - `diary_path=/path/to/diary/folder`
-  - `llm_model=model_name_available_in_ollama`
   - `htfs_path=/path/to/htfs/project`
-- If the config file is missing, or either required entry is missing/empty:
-  - Interactive terminal run: the agent prompts the user for the diary folder path, Ollama model, and HTFS project path, then writes the config file.
+- Current optional config entry:
+  - `llm_model=model_name_available_in_ollama`
+- If the config file is missing, or a required entry is missing/empty:
+  - Interactive terminal run: the agent prompts the user for the diary folder path, optional Ollama model, and HTFS project path, then writes the config file.
   - Non-interactive run: the agent exits with a clear error.
 
 ## File Management
@@ -117,11 +119,18 @@ This file describes the current implemented behavior of the diary agent in this 
 
 - Supports natural-language history search through:
   - `python diary_agent.py search "your question"`
+  - `python diary_agent.py search --tags "tag expression or natural-language tag filter" "optional question"`
 - Search behavior:
   - Retrieves candidate excerpts from `*.md` files in the configured diary directory using local token-overlap scoring.
+  - Includes HTFS section tags alongside each matching excerpt when they are available.
+  - Matches against both diary text and section tags.
+  - Optionally narrows results to sections matched by a tag expression.
+  - When an LLM model is configured, `--tags` can be a natural-language tag description that is translated to an HTFS tag expression using the currently available tags.
+  - When no LLM model is configured, `--tags` must already be a syntactically valid HTFS tag expression using `&`, `|`, `~`, and parentheses.
   - Sends the best excerpts to Ollama.
   - Returns a synthesized answer based only on the retrieved excerpts.
   - Prints the relevant excerpts after the answer.
+  - If the configured model is unavailable, the command warns the user and falls back to basic text search output using the same local ranking and section tags.
 
 ## Show Command
 
@@ -145,6 +154,8 @@ This file describes the current implemented behavior of the diary agent in this 
 - `g` opens an in-place fuzzy picker for existing diary entries.
 - `e` edits the timestamp section under the cursor in a nested prompt_toolkit editor.
 - `t` opens HTFS tag management for the timestamp section under the cursor.
+- `d` deletes the timestamp section under the cursor after explicit confirmation.
+- Deleting a timestamp section from the show viewer also removes the corresponding HTFS resource and section tags.
 - The fuzzy picker:
   - lists existing diary files only
   - orders them newest first
@@ -158,7 +169,9 @@ This file describes the current implemented behavior of the diary agent in this 
 - Timestamp sections are treated as first-class units inside a day file.
 - A stable section id is derived as:
   - `dd_mm_yyyy.md#HH:MM`
-- Section parsing currently uses `## HH:MM` headings as boundaries.
+  - or `dd_mm_yyyy.md#HH:MM:<serial>` when multiple sections share the same minute.
+- Section parsing currently uses `## HH:MM` and `## HH:MM:<serial>` headings as boundaries.
+- During capture, if a section for the current minute already exists, the new section heading is suffixed with `:<serial>` (for example `## 14:30:2`).
 - Text before the first timestamp heading is ignored for section parsing.
 
 ## HTFS Tag Commands
@@ -191,7 +204,7 @@ This file describes the current implemented behavior of the diary agent in this 
 
 - If `ollama` Python package is missing, the script exits with a clear runtime error.
 - If `prompt_toolkit` is missing, CLI fallbacks are used automatically.
-- If Ollama is not reachable or the configured model is unavailable, the script exits with a clear runtime error.
+- If Ollama is not reachable or the configured model is unavailable, the script exits with a clear runtime error when an LLM-backed path is used.
 - Keyboard interrupt is handled gracefully.
 
 ## Current File Structure
@@ -201,7 +214,7 @@ This file describes the current implemented behavior of the diary agent in this 
 
 config.txt:
 diary_path=/path/to/Diary
-llm_model=llama3
+# llm_model=llama3   # optional
 
 /Project_Root
 |

@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
+from . import core
 from .models import DiarySection
 
 
@@ -12,7 +13,7 @@ class HTFSAdapter:
 
     def __init__(self, boundary: Path, import_path: Path | None = None) -> None:
         self.boundary = boundary.resolve()
-        self.import_path = (import_path or Path("/linuxdev/github/HTFS")).expanduser().resolve()
+        self.import_path = (import_path or core.default_htfs_path()).expanduser().resolve()
 
     @property
     def sqlite_path(self) -> Path:
@@ -181,6 +182,28 @@ class HTFSAdapter:
             current_tags = client.get_resource_tags(resource_path)
             if current_tags:
                 client.untag_resource(resource_path, list(current_tags))
+        finally:
+            client.close()
+
+    def delete_section_resource(self, section: DiarySection) -> None:
+        client = self._client()
+        try:
+            resource_path = self.resource_path_for_section(section)
+            current_tags = client.get_resource_tags(resource_path)
+            if current_tags:
+                client.untag_resource(resource_path, list(current_tags))
+
+            # Prefer full resource deletion when supported by the installed HTFS API.
+            for method_name in ("del_resource", "delete_resource", "remove_resource"):
+                method = getattr(client, method_name, None)
+                if method is None:
+                    continue
+                try:
+                    method(resource_path)
+                except Exception:
+                    # Treat missing resource as already deleted.
+                    pass
+                break
         finally:
             client.close()
 

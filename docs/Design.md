@@ -131,6 +131,12 @@ Important current behavior:
 6. Review semantically similar TODOs against unresolved historical tasks.
 7. Append the surviving entry to today's file under a time heading.
 
+Timestamp heading disambiguation:
+
+- The first update in a minute uses `## HH:MM`.
+- If that minute already exists in the same day file, the next update uses `## HH:MM:<serial>` (for example `## 14:30:2`, then `## 14:30:3`).
+- This keeps section ids unique for edit/tag/delete and HTFS resource mapping.
+
 ### Non-Interactive Path
 
 The `capture --text "..."` path skips the editor and uses the provided text as input. In this path the rewritten entry still goes through deterministic dedupe and TODO similarity review before append. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically.
@@ -243,6 +249,8 @@ Behavior:
 - The picker lists newest first and shows a human-readable date plus a preview line.
 - `e` opens a nested editor for the timestamp section under the cursor and writes the edited section back into the current file.
 - `t` opens HTFS tag management for the timestamp section under the cursor.
+- `d` confirms and deletes the timestamp section under the cursor from the current file.
+- Section deletion also removes the corresponding HTFS section resource and associated tags.
 - Without `prompt_toolkit`, the file contents are printed to stdout.
 
 Implementation note:

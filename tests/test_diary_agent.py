@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import diary_agent
+import diary_agent_app.core as core
 from diary_agent_app.htfs_adapter import HTFSAdapter
 import diary_agent_app.ui as ui
 
@@ -48,16 +49,50 @@ def test_load_or_initialize_config_reads_required_entries(monkeypatch, tmp_path)
     assert config.htfs_path == fake_home / "HTFS"
 
 
-def test_load_or_initialize_config_non_interactive_missing_values_raises(monkeypatch, tmp_path):
+def test_load_or_initialize_config_allows_missing_llm_model(monkeypatch, tmp_path):
     fake_home = tmp_path / "home"
     config_path = fake_home / ".config" / "diary_agent" / "config.txt"
     config_path.parent.mkdir(parents=True)
-    config_path.write_text("diary_path=\nllm_model=\nhtfs_path=\n", encoding="utf-8")
+    config_path.write_text("diary_path=~/journal\nhtfs_path=~/HTFS\n", encoding="utf-8")
+    monkeypatch.setattr(diary_agent.Path, "home", lambda: fake_home)
+    monkeypatch.setattr(core.Path, "home", lambda: fake_home)
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    config = diary_agent.load_or_initialize_config()
+
+    assert config.diary_dir == fake_home / "journal"
+    assert config.llm_model is None
+    assert config.htfs_path == fake_home / "HTFS"
+
+
+def test_load_or_initialize_config_non_interactive_missing_required_values_raises(monkeypatch, tmp_path):
+    fake_home = tmp_path / "home"
+    config_path = fake_home / ".config" / "diary_agent" / "config.txt"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("diary_path=\nhtfs_path=\n", encoding="utf-8")
     monkeypatch.setattr(diary_agent.Path, "home", lambda: fake_home)
     monkeypatch.setattr(diary_agent.sys.stdin, "isatty", lambda: False)
 
     with pytest.raises(RuntimeError, match="Missing or invalid config"):
         diary_agent.load_or_initialize_config()
+
+
+def test_default_htfs_path_uses_environment_override(monkeypatch, tmp_path):
+    custom_path = tmp_path / "custom-htfs"
+    monkeypatch.setenv(core.DEFAULT_HTFS_PATH_ENV, str(custom_path))
+
+    assert core.default_htfs_path() == custom_path
+    assert diary_agent.core.default_htfs_path() == custom_path
+    assert diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model").htfs_path == custom_path
+    assert HTFSAdapter(tmp_path).import_path == custom_path.resolve()
+
+
+def test_default_htfs_path_falls_back_to_home_directory(monkeypatch, tmp_path):
+    fake_home = tmp_path / "home"
+    monkeypatch.delenv(core.DEFAULT_HTFS_PATH_ENV, raising=False)
+    monkeypatch.setattr(core.Path, "home", lambda: fake_home)
+
+    assert core.default_htfs_path(home=fake_home, repo_root=tmp_path / "repo") == fake_home / "HTFS"
 
 
 def test_write_config_includes_htfs_path(tmp_path):
@@ -72,6 +107,21 @@ def test_write_config_includes_htfs_path(tmp_path):
     assert config_path.read_text(encoding="utf-8") == (
         f"diary_path={tmp_path / 'journal'}\n"
         f"llm_model=qwen2.5\n"
+        f"htfs_path={tmp_path / 'HTFS'}\n"
+    )
+
+
+def test_write_config_omits_llm_model_when_not_configured(tmp_path):
+    config_path = tmp_path / "config.txt"
+    diary_agent.write_config(
+        config_path,
+        tmp_path / "journal",
+        None,
+        tmp_path / "HTFS",
+    )
+
+    assert config_path.read_text(encoding="utf-8") == (
+        f"diary_path={tmp_path / 'journal'}\n"
         f"htfs_path={tmp_path / 'HTFS'}\n"
     )
 
@@ -117,6 +167,45 @@ def test_append_entry_appends_to_existing_daily_file(tmp_path):
         "- first note\n\n"
         "## 14:30\n\n"
         "- second note\n"
+    )
+
+
+def test_append_entry_verbatim_uses_serial_suffix_for_same_minute(tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    today = dt.date(2026, 3, 26)
+    existing_path = agent.today_file(today)
+    existing_path.write_text("## 14:30\n\n- first note\n", encoding="utf-8")
+
+    class FixedDate(dt.date):
+        @classmethod
+        def today(cls):
+            return today
+
+    class FixedDateTime(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 3, 26, 14, 30)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(diary_agent.dt, "date", FixedDate)
+    monkeypatch.setattr(diary_agent.dt, "datetime", FixedDateTime)
+    try:
+        first_path, first_appended = agent.append_entry_verbatim("- second note")
+        second_path, second_appended = agent.append_entry_verbatim("- third note")
+    finally:
+        monkeypatch.undo()
+
+    assert first_appended is True
+    assert second_appended is True
+    assert first_path == existing_path
+    assert second_path == existing_path
+    assert existing_path.read_text(encoding="utf-8") == (
+        "## 14:30\n\n"
+        "- first note\n\n"
+        "## 14:30:2\n\n"
+        "- second note\n\n"
+        "## 14:30:3\n\n"
+        "- third note\n"
     )
 
 
@@ -286,6 +375,25 @@ def test_parse_day_sections_returns_timestamp_sections_with_stable_ids(tmp_path)
     ]
 
 
+def test_parse_day_sections_supports_serialized_timestamp_headings(tmp_path):
+    file_path = tmp_path / "26_03_2026.md"
+    file_path.write_text(
+        "## 14:30\n\n"
+        "- first note\n\n"
+        "## 14:30:2\n\n"
+        "- second note\n",
+        encoding="utf-8",
+    )
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    sections = agent.parse_day_sections(file_path)
+
+    assert [(section.heading, section.section_id) for section in sections] == [
+        ("14:30", "26_03_2026.md#14:30"),
+        ("14:30:2", "26_03_2026.md#14:30:2"),
+    ]
+
+
 def test_parse_day_sections_ignores_text_before_first_timestamp_heading(tmp_path):
     file_path = tmp_path / "26_03_2026.md"
     file_path.write_text(
@@ -326,6 +434,54 @@ def test_section_for_id_returns_none_for_missing_section(tmp_path):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
 
     assert agent.section_for_id("26_03_2026.md#14:30") is None
+
+
+def test_delete_section_removes_markdown_section_and_htfs_resource(monkeypatch, tmp_path):
+    file_path = tmp_path / "26_03_2026.md"
+    file_path.write_text(
+        "## 09:15\n\n"
+        "- first note\n\n"
+        "## 14:30\n\n"
+        "- second note\n",
+        encoding="utf-8",
+    )
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    recorded = {}
+
+    class FakeAdapter:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def delete_section_resource(self, section):
+            recorded["deleted"] = section.section_id
+
+    monkeypatch.setattr(diary_agent, "HTFSAdapter", FakeAdapter)
+
+    updated = agent.delete_section(file_path, "09:15")
+
+    assert updated == "## 14:30\n\n- second note"
+    assert file_path.read_text(encoding="utf-8") == "## 14:30\n\n- second note\n"
+    assert recorded == {"deleted": "26_03_2026.md#09:15"}
+
+
+def test_delete_section_returns_none_when_heading_is_missing(monkeypatch, tmp_path):
+    file_path = tmp_path / "26_03_2026.md"
+    original = "## 09:15\n\n- first note\n"
+    file_path.write_text(original, encoding="utf-8")
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    constructed = {"count": 0}
+
+    class FakeAdapter:
+        def __init__(self, *_args, **_kwargs):
+            constructed["count"] += 1
+
+    monkeypatch.setattr(diary_agent, "HTFSAdapter", FakeAdapter)
+
+    updated = agent.delete_section(file_path, "14:30")
+
+    assert updated is None
+    assert constructed["count"] == 0
+    assert file_path.read_text(encoding="utf-8") == original
 
 
 def test_htfs_adapter_maps_section_to_resource_path_and_back(tmp_path):
@@ -659,12 +815,20 @@ def test_build_parser_accepts_tag_list_and_tree():
 
     list_args = parser.parse_args(["tags", "ls"])
     tree_args = parser.parse_args(["tags", "tree", "Project"])
+    search_args = parser.parse_args(["search", "--tags", "Project&Topic", "login bug"])
+    tag_only_args = parser.parse_args(["search", "--tags", "Project/DiaryAgent"])
 
     assert list_args.command == "tags"
     assert list_args.tags_command == "ls"
     assert tree_args.command == "tags"
     assert tree_args.tags_command == "tree"
     assert tree_args.tag == "Project"
+    assert search_args.command == "search"
+    assert search_args.query == "login bug"
+    assert search_args.tags == "Project&Topic"
+    assert tag_only_args.command == "search"
+    assert tag_only_args.query is None
+    assert tag_only_args.tags == "Project/DiaryAgent"
 
 
 def test_run_capture_reports_duplicate_update(monkeypatch, tmp_path, capsys):
@@ -740,6 +904,54 @@ def test_run_capture_interactive_exposes_rewrite_callback_and_saves_final_edit_v
         ("", "Capturing update", "- Rewritten note"),
     ]
     assert capsys.readouterr().out == "Updated 26_03_2026.md\n\n- Final edited note\n\n### keep this heading\n"
+
+
+def test_run_capture_interactive_hides_llm_callbacks_when_model_missing(monkeypatch, tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model=None)
+    monkeypatch.setattr(agent, "ensure_storage", lambda: None)
+
+    editor_calls = {}
+
+    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+        editor_calls["rewrite"] = rewrite
+        editor_calls["suggest_tags"] = suggest_tags
+        return "- Final edited note", []
+
+    monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
+    monkeypatch.setattr(diary_agent, "prompt_for_section_tags", lambda *args, **kwargs: [])
+
+    class FakeAdapter:
+        def list_tags(self):
+            return []
+
+        def add_tags(self, tags):
+            return []
+
+        def tag_section(self, section, tags):
+            return []
+
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
+            return []
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
+    monkeypatch.setattr(
+        agent,
+        "append_entry_verbatim",
+        lambda entry: (tmp_path / "26_03_2026.md", True),
+    )
+    monkeypatch.setattr(
+        agent,
+        "latest_section_for_file",
+        lambda _path: diary_agent.DiarySection(tmp_path / "26_03_2026.md", "14:30", "- Final edited note"),
+    )
+
+    exit_code = diary_agent.run_capture(agent)
+
+    assert exit_code == 0
+    assert editor_calls == {"rewrite": None, "suggest_tags": None}
 
 
 def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_draft(monkeypatch, tmp_path):
@@ -851,6 +1063,27 @@ def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, 
         "section_id": "26_03_2026.md#14:30",
         "tagged": ["DiaryAgent"],
     }
+
+
+def test_run_show_day_hides_llm_tag_suggestions_when_model_missing(monkeypatch, tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model=None)
+    target = tmp_path / "05_03_2026.md"
+    target.write_text("## 14:30\n\n- note\n", encoding="utf-8")
+
+    recorded = {}
+
+    def fake_show_diary_entry(*args, **kwargs):
+        recorded["suggest_tags"] = kwargs.get("suggest_tags")
+        recorded["set_tags"] = kwargs.get("set_tags")
+        return None
+
+    monkeypatch.setattr(diary_agent, "show_diary_entry", fake_show_diary_entry)
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: None)
+
+    exit_code = diary_agent.run_show_day(agent, day_text="05_03_2026")
+
+    assert exit_code == 0
+    assert recorded["suggest_tags"] is None
 
 
 def test_launch_editor_uses_thread_mode_when_called_from_async_context(monkeypatch):
@@ -1102,12 +1335,193 @@ def test_search_returns_best_matching_history_chunks(tmp_path):
     results = agent.search("login bug", limit=2)
 
     assert len(results) == 2
-    assert {path.name for path, _chunk, _score in results} == {
+    assert {result.file_path.name for result in results} == {
         "25_03_2026.md",
         "26_03_2026.md",
     }
-    assert all("login bug" in chunk.lower() for _path, chunk, _score in results)
-    assert all(score > 0 for _path, _chunk, score in results)
+    assert all("login bug" in result.snippet.lower() for result in results)
+    assert all(result.score > 0 for result in results)
+
+
+def test_search_attaches_section_tags_to_matching_excerpts(monkeypatch, tmp_path):
+    (tmp_path / "25_03_2026.md").write_text(
+        "## 14:30\n\n- fixed login bug\n",
+        encoding="utf-8",
+    )
+
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def section_tags(self, section):
+            return ["Project/DiaryAgent"] if section.heading == "14:30" else []
+
+    monkeypatch.setattr(diary_agent, "HTFSAdapter", FakeAdapter)
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    results = agent.search("login bug", limit=1)
+
+    assert len(results) == 1
+    assert results[0].section_tags == ("Project/DiaryAgent",)
+
+
+def test_search_matches_sections_via_tags(monkeypatch, tmp_path):
+    (tmp_path / "25_03_2026.md").write_text(
+        "## 14:30\n\n- unrelated notes\n",
+        encoding="utf-8",
+    )
+
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def section_tags(self, section):
+            return ["Project/DiaryAgent"] if section.heading == "14:30" else []
+
+    monkeypatch.setattr(diary_agent, "HTFSAdapter", FakeAdapter)
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model=None)
+
+    results = agent.search("DiaryAgent", limit=5)
+
+    assert len(results) == 1
+    assert results[0].file_path.name == "25_03_2026.md"
+    assert results[0].section_tags == ("Project/DiaryAgent",)
+    assert "unrelated notes" in results[0].snippet
+    assert results[0].score > 0
+
+
+def test_run_search_falls_back_to_basic_text_search_when_llm_is_unavailable(monkeypatch, tmp_path, capsys):
+    (tmp_path / "25_03_2026.md").write_text(
+        "## 14:30\n\n- fixed login bug\n",
+        encoding="utf-8",
+    )
+
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def section_tags(self, section):
+            return ["Project/DiaryAgent"]
+
+    monkeypatch.setattr(diary_agent, "HTFSAdapter", FakeAdapter)
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    def fake_answer_query(_query, _matches):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(agent, "answer_query", fake_answer_query)
+
+    exit_code = diary_agent.run_search(agent, "login bug")
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Warning: LLM search is unavailable; showing basic text search results instead." in captured.err
+    assert "Basic text search results:" in captured.out
+    assert "[25_03_2026.md#14:30] [tags: Project/DiaryAgent]" in captured.out
+    assert "fixed login bug" in captured.out
+
+
+def test_run_search_supports_raw_tag_expressions_without_llm(monkeypatch, tmp_path, capsys):
+    (tmp_path / "25_03_2026.md").write_text("## 14:30\n\n- fixed login bug\n", encoding="utf-8")
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model=None)
+
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            self.expressions = []
+
+        def get_all_tag_paths(self):
+            return ["Project/DiaryAgent", "Topic/Retrieval"]
+
+        def query_resource_paths(self, expression):
+            self.expressions.append(expression)
+            return [f"{tmp_path / '25_03_2026.md'}#14:30"]
+
+        def load_section_by_resource_path(self, agent_obj, resource_path):
+            return diary_agent.DiarySection(tmp_path / "25_03_2026.md", "14:30", "- fixed login bug")
+
+        def section_tags(self, section):
+            return ["Project/DiaryAgent"]
+
+    fake_adapter = FakeAdapter()
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: fake_adapter)
+
+    exit_code = diary_agent.run_search(agent, tag_filter="Project/DiaryAgent")
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert fake_adapter.expressions == ["Project/DiaryAgent"]
+    assert "Tag search results:" in captured.out
+    assert "[25_03_2026.md#14:30] [tags: Project/DiaryAgent]" in captured.out
+    assert "fixed login bug" in captured.out
+
+
+def test_run_search_translates_natural_language_tag_filters_when_llm_enabled(monkeypatch, tmp_path, capsys):
+    (tmp_path / "25_03_2026.md").write_text("## 14:30\n\n- fixed login bug\n", encoding="utf-8")
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            self.expressions = []
+
+        def get_all_tag_paths(self):
+            return ["Project/DiaryAgent", "Topic/Retrieval"]
+
+        def query_resource_paths(self, expression):
+            self.expressions.append(expression)
+            return [f"{tmp_path / '25_03_2026.md'}#14:30"]
+
+        def load_section_by_resource_path(self, agent_obj, resource_path):
+            return diary_agent.DiarySection(tmp_path / "25_03_2026.md", "14:30", "- fixed login bug")
+
+        def section_tags(self, section):
+            return ["Project/DiaryAgent"]
+
+    fake_adapter = FakeAdapter()
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: fake_adapter)
+    monkeypatch.setattr(
+        agent,
+        "tag_expression_from_natural_language",
+        lambda request, available_tags: "(Project/DiaryAgent|Topic/Retrieval)" if "login" in request else "",
+    )
+
+    exit_code = diary_agent.run_search(agent, tag_filter="login work")
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert fake_adapter.expressions == ["(Project/DiaryAgent|Topic/Retrieval)"]
+    assert "Tag search results:" in captured.out
+    assert "[25_03_2026.md#14:30] [tags: Project/DiaryAgent]" in captured.out
+
+
+def test_answer_query_includes_section_tags_in_prompt(monkeypatch):
+    captured = {}
+
+    class FakeOllama:
+        @staticmethod
+        def chat(*, model, messages):
+            captured["model"] = model
+            captured["messages"] = messages
+            return {"message": {"content": "Answer"}}
+
+    monkeypatch.setattr(diary_agent.llm, "ollama", FakeOllama())
+
+    answer = diary_agent.llm.answer_query(
+        model="test-model",
+        query="What happened with login bugs?",
+        matches=[
+            diary_agent.SearchResult(
+                file_path=Path("25_03_2026.md"),
+                snippet="- fixed login bug",
+                score=3,
+                section_tags=("Project/DiaryAgent", "Topic/Retrieval"),
+            )
+        ],
+    )
+
+    assert answer == "Answer"
+    user_message = captured["messages"][1]["content"]
+    assert "Tags: Project/DiaryAgent, Topic/Retrieval" in user_message
+    assert captured["model"] == "test-model"
 
 
 def test_parse_explicit_day_input_accepts_dd_mm_yyyy():
@@ -1283,6 +1697,7 @@ def test_run_show_day_wires_htfs_callbacks(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "ensure_storage", lambda: None)
     monkeypatch.setattr(agent, "get_section_tags", lambda _path: {"14:30": ["Project/DiaryAgent"]})
     monkeypatch.setattr(agent, "suggest_tags_for_text", lambda text, all_tags: ["Topic/Retrieval"])
+    monkeypatch.setattr(agent, "delete_section", lambda path, heading: f"deleted {path.name}#{heading}")
 
     adapter_calls = {}
 
@@ -1315,11 +1730,13 @@ def test_run_show_day_wires_htfs_callbacks(monkeypatch, tmp_path):
         set_tags=None,
         get_all_tags=None,
         suggest_tags=None,
+        delete_section=None,
     ):
         shown["title"] = title
         shown["body"] = body
         shown["all_tags"] = get_all_tags()
         shown["suggested"] = suggest_tags("note")
+        shown["deleted"] = delete_section(title, "14:30")
 
     monkeypatch.setattr(diary_agent, "show_diary_entry", fake_show_diary_entry)
 
@@ -1331,6 +1748,7 @@ def test_run_show_day_wires_htfs_callbacks(monkeypatch, tmp_path):
         "body": "## 14:30\n- Note",
         "all_tags": (["Project/DiaryAgent", "Topic/Retrieval"], ["Project", "Topic"], ["Project/DiaryAgent", "Topic/Retrieval"]),
         "suggested": ["Topic/Retrieval"],
+        "deleted": "deleted 05_03_2026.md#14:30",
     }
     assert adapter_calls == {"list_tags": True, "top_level": True, "all_paths": True}
 

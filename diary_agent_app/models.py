@@ -24,7 +24,7 @@ class SimilarTodoMatch:
 @dataclass(frozen=True)
 class AppConfig:
     diary_dir: Path
-    llm_model: str
+    llm_model: str | None
     htfs_path: Path
 
 
@@ -45,3 +45,12 @@ class DiarySection:
     @property
     def section_id(self) -> str:
         return f"{self.file_path.name}#{self.heading}"
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    file_path: Path
+    snippet: str
+    score: int
+    section_tags: tuple[str, ...] = ()
+    section_id: str | None = None
