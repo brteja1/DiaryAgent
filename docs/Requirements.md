@@ -65,6 +65,11 @@ This file describes the current implemented behavior of the diary agent in this 
   - Empty line or Ctrl-D finishes input.
 - Non-interactive capture is supported through:
   - `python diary_agent.py capture --text "..."`.
+- Capture can target a specific day file through:
+  - `python diary_agent.py capture --day "dd_mm_yyyy"`
+  - `python diary_agent.py capture --day "dd_mm_yyyy" --text "..."`
+- If `--day` is omitted, capture still defaults to today's date.
+- If `--day` is provided, it must match `dd_mm_yyyy`; other formats are rejected with a clear error.
 
 ## Diary Formatting
 
@@ -99,7 +104,7 @@ This file describes the current implemented behavior of the diary agent in this 
 ## Duplicate Entry Protection
 
 - All entries (both TODOs and regular notes) are deduplicated against:
-  - Existing entries in today's file
+  - Existing entries in the target day file
   - Entries within the new content itself
 - Uses normalized text comparison (tokenized and lowercased).
 - Exact or near-exact TODO duplicates are removed before appending.

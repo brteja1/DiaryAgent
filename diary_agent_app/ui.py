@@ -541,7 +541,7 @@ def show_diary_entry(
         read_only=True,
         scrollbar=True,
         focusable=True,
-        wrap_lines=False,
+        wrap_lines=True,
     )
     query_input = TextArea(
         height=1,

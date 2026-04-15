@@ -848,6 +848,35 @@ def test_run_capture_reports_duplicate_update(monkeypatch, tmp_path, capsys):
     assert capsys.readouterr().out == "This update has already been added.\n"
 
 
+def test_run_capture_non_interactive_writes_to_requested_day(monkeypatch, tmp_path, capsys):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    monkeypatch.setattr(agent, "ensure_storage", lambda: None)
+    monkeypatch.setattr(agent, "synthesize_entry", lambda text, day_text=None: "- Backfilled note")
+    monkeypatch.setattr(
+        agent,
+        "review_entry_todos",
+        lambda entry, interactive: (entry, []),
+    )
+
+    recorded = {}
+
+    def fake_append_entry(entry, day_text=None):
+        recorded["entry"] = entry
+        recorded["day_text"] = day_text
+        return tmp_path / "25_03_2026.md", True
+
+    monkeypatch.setattr(agent, "append_entry", fake_append_entry)
+
+    exit_code = diary_agent.run_capture(agent, raw_text="backfill update", day_text="25_03_2026")
+
+    assert exit_code == 0
+    assert recorded == {
+        "entry": "- Backfilled note",
+        "day_text": "25_03_2026",
+    }
+    assert capsys.readouterr().out == "Updated 25_03_2026.md\n\n- Backfilled note\n"
+
+
 def test_run_capture_interactive_exposes_rewrite_callback_and_saves_final_edit_verbatim(monkeypatch, tmp_path, capsys):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
     monkeypatch.setattr(agent, "ensure_storage", lambda: None)
@@ -1000,6 +1029,51 @@ def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_dra
     assert editor_calls == [
         ("", "Capturing update", "- New note"),
     ]
+
+
+def test_run_capture_interactive_uses_requested_day_context_for_rewrite(monkeypatch, tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    monkeypatch.setattr(agent, "ensure_storage", lambda: None)
+    monkeypatch.setattr(agent, "read_day_context", lambda day_text=None: "## 09:15\n\n- Prior note" if day_text == "25_03_2026" else "")
+
+    captured = {}
+
+    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+        captured["rewritten"] = rewrite("raw update") if rewrite is not None else initial_text
+        return "- New note", []
+
+    monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
+    monkeypatch.setattr(agent, "synthesize_entry", lambda text, day_text=None: "- Prior note\n- New note")
+    monkeypatch.setattr(diary_agent, "prompt_for_section_tags", lambda *args, **kwargs: [])
+
+    class FakeAdapter:
+        def list_tags(self):
+            return []
+
+        def add_tags(self, tags):
+            return []
+
+        def tag_section(self, section, tags):
+            return []
+
+        def get_top_level_tags(self):
+            return []
+
+        def get_all_tag_paths(self):
+            return []
+
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", lambda *_args: FakeAdapter())
+    monkeypatch.setattr(agent, "append_entry_verbatim", lambda entry, day_text=None: (tmp_path / "25_03_2026.md", True))
+    monkeypatch.setattr(
+        agent,
+        "latest_section_for_file",
+        lambda _path: diary_agent.DiarySection(tmp_path / "25_03_2026.md", "14:30", "- New note"),
+    )
+
+    exit_code = diary_agent.run_capture(agent, day_text="25_03_2026")
+
+    assert exit_code == 0
+    assert captured == {"rewritten": "- New note"}
 
 
 def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, tmp_path):
@@ -1778,6 +1852,84 @@ def test_run_show_day_falls_back_to_stdout_when_ui_unavailable(monkeypatch, tmp_
     )
 
 
+def test_show_diary_entry_wraps_read_only_content(monkeypatch):
+    captured = {}
+
+    class FakeEventHook:
+        def __iadd__(self, _handler):
+            return self
+
+    class FakeDocument:
+        cursor_position_row = 0
+
+    class FakeBuffer:
+        def __init__(self):
+            self.cursor_position = 0
+            self.document = FakeDocument()
+            self.on_text_changed = FakeEventHook()
+
+    class FakeTextArea:
+        def __init__(self, *args, **kwargs):
+            if "read_only" in kwargs:
+                captured["show_text_area"] = kwargs
+            self.text = kwargs.get("text", "")
+            self.buffer = FakeBuffer()
+
+    class FakeCondition:
+        def __init__(self, _fn):
+            pass
+
+        def __invert__(self):
+            return self
+
+    class FakeKeyBindings:
+        def add(self, *_args, **_kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+    class FakeFrame:
+        def __init__(self, body, title=None):
+            self.body = body
+            self.title = title
+
+    class FakeWindow:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+    class FakeLayout:
+        def __init__(self, root, focused_element=None):
+            self.root = root
+            self.focused_element = focused_element
+
+    class FakeApplication:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def run(self):
+            return None
+
+    monkeypatch.setattr(ui, "require_prompt_toolkit", lambda: None)
+    monkeypatch.setattr(ui, "TextArea", FakeTextArea)
+    monkeypatch.setattr(ui, "Condition", FakeCondition)
+    monkeypatch.setattr(ui, "KeyBindings", FakeKeyBindings)
+    monkeypatch.setattr(ui, "Frame", FakeFrame)
+    monkeypatch.setattr(ui, "Window", FakeWindow)
+    monkeypatch.setattr(ui, "FormattedTextControl", lambda *args, **kwargs: ("formatted", args, kwargs))
+    monkeypatch.setattr(ui, "ConditionalContainer", lambda *args, **kwargs: ("conditional", args, kwargs))
+    monkeypatch.setattr(ui, "HSplit", lambda children: ("hsplit", children))
+    monkeypatch.setattr(ui, "Box", lambda body, padding=0: ("box", body, padding))
+    monkeypatch.setattr(ui, "Layout", FakeLayout)
+    monkeypatch.setattr(ui, "Application", FakeApplication)
+    monkeypatch.setattr(ui, "HTML", lambda text: text)
+
+    ui.show_diary_entry("05_03_2026.md", "## 14:30\nA very long line that should wrap in the show screen.")
+
+    assert captured["show_text_area"]["wrap_lines"] is True
+
+
 def test_run_show_day_reports_missing_file(monkeypatch, tmp_path, capsys):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
     target = tmp_path / "05_03_2026.md"
@@ -1801,6 +1953,16 @@ def test_build_parser_accepts_show_without_day():
 
     assert args.command == "show"
     assert args.day is None
+
+
+def test_build_parser_accepts_capture_day():
+    parser = diary_agent.build_parser()
+
+    args = parser.parse_args(["capture", "--day", "25_03_2026", "--text", "backfill"])
+
+    assert args.command == "capture"
+    assert args.day == "25_03_2026"
+    assert args.text == "backfill"
 
 def test_run_tags_show_prints_all_sections_tags_when_time_is_none(monkeypatch, tmp_path, capsys):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")

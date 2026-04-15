@@ -4,7 +4,7 @@
 
 The diary agent is a local-first Python CLI for capturing daily notes, managing persistent TODOs, viewing prior entries, and querying diary history using a locally reachable Ollama model. The current implementation is organized around four user-facing workflows:
 
-- capture a free-form update into today's diary file
+- capture a free-form update into today's diary file or an explicitly requested day file
 - review and complete open TODOs across diary history
 - view a day entry and navigate to other existing entries
 - search historical diary content with a natural-language question
@@ -15,7 +15,7 @@ The implementation currently lives in [`diary_agent.py`](/linuxdev/github/DiaryA
 
 - Keep diary storage outside the source tree and make it user-configurable.
 - Use a local terminal workflow without requiring a GUI application.
-- Preserve continuity by showing today's existing notes to the LLM as background context.
+- Preserve continuity by showing the target day's existing notes to the LLM as background context.
 - Keep TODO handling persistent across all diary files, not just the current day.
 - Reduce accidental TODO duplication with deterministic filtering plus semantic similarity checks.
 - Let the user retain final control over interactive capture output before it is written.
@@ -113,13 +113,13 @@ The capture path is the default CLI behavior.
 5. While the rewrite is running, the buffer is locked read-only and the toolbar shows that the editor is waiting for the LLM rewrite.
 6. When the rewrite finishes, the rewritten text replaces the current editor buffer in place.
 7. The user may keep editing, trigger another rewrite, or press `Ctrl+D` to submit whatever is currently in the buffer.
-8. The submitted text is appended to today's file verbatim under a time heading.
+8. The submitted text is appended to the target day file verbatim under a time heading.
 
 Important current behavior:
 
 - The interactive final buffer is not post-processed before save.
 - This means user-authored headings or manual structure edits are preserved as entered.
-- The LLM rewrite path itself removes LLM-added section headings and filters out lines already present in today's file before putting the rewritten draft back into the editor.
+- The LLM rewrite path itself removes LLM-added section headings and filters out lines already present in the target day file before putting the rewritten draft back into the editor.
 
 ### CLI Fallback Path (without prompt_toolkit)
 
@@ -127,9 +127,9 @@ Important current behavior:
 2. Ensure the diary storage directory exists.
 3. Prompt for input via stdin (empty line or Ctrl-D to finish).
 4. Send the raw text to Ollama for Markdown bullet generation.
-5. Remove duplicate entries deterministically against today's file.
+5. Remove duplicate entries deterministically against the target day file.
 6. Review semantically similar TODOs against unresolved historical tasks.
-7. Append the surviving entry to today's file under a time heading.
+7. Append the surviving entry to the target day file under a time heading.
 
 Timestamp heading disambiguation:
 
@@ -139,7 +139,7 @@ Timestamp heading disambiguation:
 
 ### Non-Interactive Path
 
-The `capture --text "..."` path skips the editor and uses the provided text as input. In this path the rewritten entry still goes through deterministic dedupe and TODO similarity review before append. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically.
+The `capture --text "..."` path skips the editor and uses the provided text as input. In this path the rewritten entry still goes through deterministic dedupe and TODO similarity review before append. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically. `capture --day dd_mm_yyyy` uses that day's file as the append and dedupe target for either interactive or `--text` capture.
 
 ## LLM Integration
 
@@ -152,7 +152,7 @@ Model selection comes from the config file by default, with `--model` available 
 Input:
 
 - timestamp
-- today's existing diary context
+- the target day's existing diary context
 - raw user update
 
 Output:

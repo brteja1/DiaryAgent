@@ -46,6 +46,19 @@ class DiaryAgent:
         date = date or dt.date.today()
         return self.diary_dir / f"{date.strftime(DATE_FMT)}.md"
 
+    def day_file(self, day_text: str | None = None) -> Path:
+        if day_text is None:
+            return self.today_file()
+        return self.file_for_day_input(day_text)
+
+    def read_day_context(self, day_text: str | None = None) -> str:
+        if day_text is None:
+            return self.read_today_context()
+        path = self.day_file(day_text)
+        if not path.exists():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+
     def read_today_context(self) -> str:
         path = self.today_file()
         if not path.exists():
@@ -160,8 +173,8 @@ class DiaryAgent:
         target = files[next_index]
         return target.name, target.read_text(encoding="utf-8").rstrip()
 
-    def append_entry(self, entry: str) -> tuple[Path, bool]:
-        path = self.today_file()
+    def append_entry(self, entry: str, day_text: str | None = None) -> tuple[Path, bool]:
+        path = self.day_file(day_text)
         existing = path.read_text(encoding="utf-8").rstrip() if path.exists() else ""
         new_lines = self.filter_new_entry_lines(entry, existing)
 
@@ -174,12 +187,12 @@ class DiaryAgent:
         path.write_text("\n\n".join(pieces) + "\n", encoding="utf-8")
         return path, True
 
-    def prepare_rewrite_for_review(self, entry: str) -> str:
-        existing = self.read_today_context()
+    def prepare_rewrite_for_review(self, entry: str, day_text: str | None = None) -> str:
+        existing = self.read_day_context(day_text)
         return "\n".join(self.filter_new_entry_lines(entry, existing)).strip()
 
-    def append_entry_verbatim(self, entry: str) -> tuple[Path, bool]:
-        path = self.today_file()
+    def append_entry_verbatim(self, entry: str, day_text: str | None = None) -> tuple[Path, bool]:
+        path = self.day_file(day_text)
         rendered_entry = entry.rstrip()
         if not rendered_entry.strip():
             return path, False
@@ -529,13 +542,13 @@ class DiaryAgent:
                 return SimilarTodoMatch(candidate_text=candidate_text, existing_task=task)
         return None
 
-    def synthesize_entry(self, raw_update: str) -> str:
+    def synthesize_entry(self, raw_update: str, day_text: str | None = None) -> str:
         if not self.llm_enabled:
             return raw_update.strip()
         return llm.synthesize_entry(
             model=self.model,
             raw_update=raw_update,
-            today_context=self.read_today_context(),
+            today_context=self.read_day_context(day_text),
             now=dt.datetime.now(),
         )
 
@@ -803,15 +816,22 @@ def get_htfs_adapter(diary_dir: Path, htfs_path: Path | None = None) -> HTFSAdap
     return adapter
 
 
-def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
+def run_capture(agent: DiaryAgent, raw_text: str | None = None, day_text: str | None = None) -> int:
     agent.ensure_storage()
+    agent.day_file(day_text)
     if raw_text is None:
         adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
         all_tags = adapter.list_tags()
         rewrite_callback = None
         suggest_callback = None
         if agent.llm_enabled:
-            rewrite_callback = lambda text: agent.prepare_rewrite_for_review(agent.synthesize_entry(text))
+            if day_text is None:
+                rewrite_callback = lambda text: agent.prepare_rewrite_for_review(agent.synthesize_entry(text))
+            else:
+                rewrite_callback = lambda text: agent.prepare_rewrite_for_review(
+                    agent.synthesize_entry(text, day_text=day_text),
+                    day_text=day_text,
+                )
             suggest_callback = lambda text: agent.suggest_tags_for_text(text, all_tags)
 
         final_entry, suggested_tags = launch_editor(
@@ -823,7 +843,10 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
             print("No update captured.")
             return 0
 
-        path, appended = agent.append_entry_verbatim(final_entry)
+        if day_text is None:
+            path, appended = agent.append_entry_verbatim(final_entry)
+        else:
+            path, appended = agent.append_entry_verbatim(final_entry, day_text=day_text)
         if appended:
             section = agent.latest_section_for_file(path)
             if section is not None:
@@ -847,10 +870,16 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None) -> int:
         print("No update captured.")
         return 0
 
-    synthesized = agent.synthesize_entry(update_text)
+    if day_text is None:
+        synthesized = agent.synthesize_entry(update_text)
+    else:
+        synthesized = agent.synthesize_entry(update_text, day_text=day_text)
     entry, skipped_matches = agent.review_entry_todos(synthesized, interactive=False)
     if entry:
-        path, appended = agent.append_entry(entry)
+        if day_text is None:
+            path, appended = agent.append_entry(entry)
+        else:
+            path, appended = agent.append_entry(entry, day_text=day_text)
         if appended:
             print(f"Updated {path.name}")
             print()
@@ -1246,11 +1275,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     capture_parser = subparsers.add_parser(
         "capture",
-        help="Open the editor and append a polished note to today's diary file.",
+        help="Open the editor and append a polished note to a diary file. Use --day DD_MM_YYYY to target a different day.",
+        description=(
+            "Open the editor and append a polished note to a diary file. "
+            "By default, capture writes to today's diary file."
+        ),
     )
     capture_parser.add_argument(
         "--text",
         help="Optional raw text to process without opening the editor.",
+    )
+    capture_parser.add_argument(
+        "--day",
+        metavar="DD_MM_YYYY",
+        help="Write to a specific diary day in dd_mm_yyyy format, for example 05_03_2026. Defaults to today.",
     )
 
     search_parser = subparsers.add_parser(
@@ -1364,7 +1402,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             htfs_path=config.htfs_path,
         )
         if command == "capture":
-            return run_capture(agent, raw_text=getattr(args, "text", None))
+            return run_capture(agent, raw_text=getattr(args, "text", None), day_text=getattr(args, "day", None))
         if command == "search":
             return run_search(agent, query=args.query, tag_filter=args.tags)
         if command == "show":
