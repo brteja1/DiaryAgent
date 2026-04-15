@@ -244,10 +244,6 @@ class DiaryAgent:
             return normalized[2:].strip()
         return normalized.strip()
 
-    def entry_timestamp_heading(self, now: dt.datetime | None = None) -> str:
-        current = now or dt.datetime.now()
-        return f"## {current.strftime('%H:%M')}"
-
     def unique_entry_timestamp_heading(
         self,
         file_path: Path,
@@ -622,20 +618,12 @@ def lines_are_redundant(first: str, second: str) -> bool:
     )
 
 
-def config_file_path() -> Path:
-    return core.config_file_path(home=Path.home())
-
-
 def parse_config_text(text: str) -> dict[str, str]:
     return core.parse_config_text(text)
 
 
 def write_config(config_path: Path, diary_dir: Path, llm_model: str, htfs_path: Path) -> None:
     core.write_config(config_path, diary_dir, llm_model, htfs_path)
-
-
-def prompt_for_config_entries(config_path: Path) -> AppConfig:
-    return core.prompt_for_config_entries(config_path, stdin=sys.stdin)
 
 
 def load_or_initialize_config() -> AppConfig:
@@ -654,10 +642,6 @@ def split_chunks(text: str) -> Iterable[str]:
 
 def score_text(text: str, tokens: Sequence[str]) -> int:
     return core.score_text(text, tokens)
-
-
-def overlap_count(text: str, tokens: Sequence[str]) -> int:
-    return core.overlap_count(text, tokens)
 
 
 def parse_explicit_day_input(day_text: str) -> str:
@@ -694,10 +678,6 @@ def resource_tags_for_specs(tags: Sequence[str]) -> list[str]:
 
 def require_prompt_toolkit() -> None:
     ui.require_prompt_toolkit()
-
-
-def status_toolbar(state: str) -> HTML:
-    return ui.status_toolbar(state)
 
 
 def prompt_for_task_completion(agent: DiaryAgent) -> None:

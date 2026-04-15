@@ -152,13 +152,6 @@ class HTFSAdapter:
         finally:
             client.close()
 
-    def link_tags(self, tag: str, parent_tag: str) -> bool:
-        client = self._client()
-        try:
-            return bool(client.link_tags(tag, parent_tag))
-        finally:
-            client.close()
-
     def tag_section(self, section: DiarySection, tags: Iterable[str]) -> list[str]:
         client = self._client()
         try:
