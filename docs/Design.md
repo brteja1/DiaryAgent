@@ -139,7 +139,7 @@ Timestamp heading disambiguation:
 
 ### Non-Interactive Path
 
-The `capture --text "..."` path skips the editor and uses the provided text as input. In this path the rewritten entry still goes through deterministic dedupe and TODO similarity review before append. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically. `capture --day dd_mm_yyyy` uses that day's file as the append and dedupe target for either interactive or `--text` capture.
+The `capture --text "..."` path skips the editor and uses the provided text as input. In this path the rewritten entry still goes through deterministic dedupe and TODO similarity review before append. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically. `capture --day dd_mm_yyyy` (or a relative date like `-1`) uses that day's file as the append and dedupe target for either interactive or `--text` capture.
 
 ## LLM Integration
 
@@ -241,7 +241,7 @@ python diary_agent.py show "05_03_2026"
 Behavior:
 
 - With no argument, `show` defaults to today's date.
-- With a `dd_mm_yyyy` argument, it opens that specific day.
+- With a `dd_mm_yyyy` or relative date argument (e.g., `-1`), it opens that specific day.
 - The `prompt_toolkit` viewer is read-only.
 - `[` and `]` move to the previous or next existing diary file in filename/date order.
 - At the ends of history, navigation is a no-op.

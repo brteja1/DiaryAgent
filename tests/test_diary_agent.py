@@ -1604,8 +1604,21 @@ def test_parse_explicit_day_input_accepts_dd_mm_yyyy():
     assert normalized == "05_03_2026"
 
 
+def test_parse_explicit_day_input_accepts_relative_days():
+    import datetime as dt
+    today = dt.date.today()
+    yesterday = (today - dt.timedelta(days=1)).strftime("%d_%m_%Y")
+    tomorrow = (today + dt.timedelta(days=1)).strftime("%d_%m_%Y")
+    today_str = today.strftime("%d_%m_%Y")
+
+    assert diary_agent.parse_explicit_day_input("0") == today_str
+    assert diary_agent.parse_explicit_day_input("-1") == yesterday
+    assert diary_agent.parse_explicit_day_input("+1") == tomorrow
+    assert diary_agent.parse_explicit_day_input("1") == tomorrow
+
+
 def test_parse_explicit_day_input_rejects_non_dd_mm_yyyy():
-    with pytest.raises(RuntimeError, match="Use dd_mm_yyyy"):
+    with pytest.raises(RuntimeError, match=r"Use dd_mm_yyyy, or relative days like -1, \+1, 0"):
         diary_agent.parse_explicit_day_input("5 March 2026")
 
 

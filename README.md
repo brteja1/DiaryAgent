@@ -108,7 +108,7 @@ Behavior:
 - While a rewrite is running, the editor status shows that it is waiting for the LLM rewrite.
 - The rewritten text is applied back into the same editor buffer, where you can keep editing before saving.
 - Whatever is in the editor when you press `Ctrl+D` is written to the diary verbatim under the timestamp heading.
-- `--day dd_mm_yyyy` writes the capture to that day's file instead of today.
+- `--day dd_mm_yyyy` writes the capture to that day's file instead of today. You can also use relative dates like `-1` (yesterday), `+1` (tomorrow), or `0` (today).
 - After a successful interactive save, the app immediately prompts for tags for the newly written timestamp section.
 - The tag prompt shows the existing HTFS tags and also accepts new comma-separated tags.
 - Nested bullets are preserved when useful, but the rewrite does not introduce new Markdown sections.
@@ -152,6 +152,7 @@ Behavior:
 ```bash
 python diary_agent.py show
 python diary_agent.py show "05_03_2026"
+python diary_agent.py show "-1"
 ```
 
 Behavior:
@@ -170,6 +171,7 @@ Behavior:
 
 ```bash
 python diary_agent.py show "05_03_2026"
+python diary_agent.py show "-1"
 ```
 
 ### Section Tags

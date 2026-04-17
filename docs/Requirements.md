@@ -69,7 +69,7 @@ This file describes the current implemented behavior of the diary agent in this 
   - `python diary_agent.py capture --day "dd_mm_yyyy"`
   - `python diary_agent.py capture --day "dd_mm_yyyy" --text "..."`
 - If `--day` is omitted, capture still defaults to today's date.
-- If `--day` is provided, it must match `dd_mm_yyyy`; other formats are rejected with a clear error.
+- If `--day` is provided, it must match `dd_mm_yyyy` or a relative date integer like `-1` (yesterday), `+1` (tomorrow), or `0` (today); other formats are rejected with a clear error.
 
 ## Diary Formatting
 
@@ -144,7 +144,7 @@ This file describes the current implemented behavior of the diary agent in this 
   - `python diary_agent.py show "dd_mm_yyyy"`
 - If `show` is run without an argument, it defaults to today's date.
 - If today's diary file does not exist, the command offers to open the most recent available diary entry instead.
-- If a day argument is provided, it must match `dd_mm_yyyy`; other formats are rejected with a clear error.
+- If a day argument is provided, it must match `dd_mm_yyyy` or a relative date integer like `-1` (yesterday), `+1` (tomorrow), or `0` (today); other formats are rejected with a clear error.
 - If the target diary file does not exist, the command reports that no entry was found.
 - With `prompt_toolkit` available, the entry opens in a full-screen read-only viewer.
 - Without `prompt_toolkit`, the stored entry is printed to stdout.

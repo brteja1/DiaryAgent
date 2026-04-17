@@ -646,9 +646,19 @@ def score_text(text: str, tokens: Sequence[str]) -> int:
 
 def parse_explicit_day_input(day_text: str) -> str:
     normalized = day_text.strip()
+    
+    # Try parsing as a relative date (e.g., -1, +2, 0)
+    if re.fullmatch(r"[-+]?\d+", normalized):
+        try:
+            days_offset = int(normalized)
+            target_date = dt.date.today() + dt.timedelta(days=days_offset)
+            return target_date.strftime(DATE_FMT)
+        except (ValueError, OverflowError):
+            pass
+
     if not re.fullmatch(r"\d{2}_\d{2}_\d{4}", normalized):
         raise RuntimeError(
-            "Invalid day format. Use dd_mm_yyyy, for example 05_03_2026."
+            "Invalid day format. Use dd_mm_yyyy, or relative days like -1, +1, 0."
         )
     return normalized
 
@@ -1255,7 +1265,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     capture_parser = subparsers.add_parser(
         "capture",
-        help="Open the editor and append a polished note to a diary file. Use --day DD_MM_YYYY to target a different day.",
+        help="Open the editor and append a polished note to a diary file. Use --day DD_MM_YYYY or relative days (e.g., -1 for yesterday) to target a different day.",
         description=(
             "Open the editor and append a polished note to a diary file. "
             "By default, capture writes to today's diary file."
@@ -1267,8 +1277,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     capture_parser.add_argument(
         "--day",
-        metavar="DD_MM_YYYY",
-        help="Write to a specific diary day in dd_mm_yyyy format, for example 05_03_2026. Defaults to today.",
+        metavar="DAY",
+        help="Write to a specific diary day in dd_mm_yyyy format or relative days like -1 or +1. Defaults to today.",
     )
 
     search_parser = subparsers.add_parser(
@@ -1292,7 +1302,7 @@ def build_parser() -> argparse.ArgumentParser:
     show_parser.add_argument(
         "day",
         nargs="?",
-        help="Day in dd_mm_yyyy format, for example 05_03_2026.",
+        help="Day in dd_mm_yyyy format or relative days like -1, +1, 0.",
     )
 
     todos_parser = subparsers.add_parser(
@@ -1326,22 +1336,23 @@ def build_parser() -> argparse.ArgumentParser:
         "show",
         help="Show HTFS tags for a specific diary section.",
     )
-    tags_show_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
+    tags_show_parser.add_argument("day", help="Day in dd_mm_yyyy format or relative days like -1, +1, 0.")
     tags_show_parser.add_argument("time", nargs="?", help="Section time in HH:MM or HH:MM:<serial> format.")
 
     tags_apply_parser = tags_subparsers.add_parser(
         "apply",
         help="Apply HTFS tags to a specific diary section.",
     )
-    tags_apply_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
+    tags_apply_parser.add_argument("day", help="Day in dd_mm_yyyy format or relative days like -1, +1, 0.")
     tags_apply_parser.add_argument("time", help="Section time in HH:MM or HH:MM:<serial> format.")
-    tags_apply_parser.add_argument("tags", nargs="+", help="HTFS tags to apply.")
+    tags_apply_parser.add_argument("tags", nargs="+", help="One or more HTFS tags to apply.")
 
     tags_suggest_parser = tags_subparsers.add_parser(
         "suggest",
-        help="Suggest HTFS tags for a specific diary section using the configured model.",
+        help="Suggest HTFS tags for a specific diary section.",
     )
-    tags_suggest_parser.add_argument("day", help="Day in dd_mm_yyyy format.")
+    tags_suggest_parser.add_argument("day", help="Day in dd_mm_yyyy format or relative days like -1, +1, 0.")
+
     tags_suggest_parser.add_argument("time", help="Section time in HH:MM or HH:MM:<serial> format.")
 
     tags_delete_parser = tags_subparsers.add_parser(
