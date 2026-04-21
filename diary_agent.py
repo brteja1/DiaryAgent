@@ -735,10 +735,17 @@ def confirm_similar_todo_addition_cli(match: SimilarTodoMatch) -> bool:
 def launch_editor(
     initial_text: str = "",
     state: str = "Capturing update",
+    info_message: str | None = None,
     rewrite=None,
     suggest_tags=None,
 ) -> tuple[str, list[str]]:
-    return ui.launch_editor(initial_text, state=state, rewrite=rewrite, suggest_tags=suggest_tags)
+    return ui.launch_editor(
+        initial_text,
+        state=state,
+        info_message=info_message,
+        rewrite=rewrite,
+        suggest_tags=suggest_tags,
+    )
 
 
 def prompt_for_section_tags(
@@ -806,6 +813,15 @@ def get_htfs_adapter(diary_dir: Path, htfs_path: Path | None = None) -> HTFSAdap
     return adapter
 
 
+def capture_info_message(day_text: str | None = None) -> str:
+    normalized_day = (
+        dt.date.today().strftime(DATE_FMT)
+        if day_text is None
+        else parse_explicit_day_input(day_text)
+    )
+    return f"Capturing update for {format_entry_title(normalized_day)}"
+
+
 def run_capture(agent: DiaryAgent, raw_text: str | None = None, day_text: str | None = None) -> int:
     agent.ensure_storage()
     agent.day_file(day_text)
@@ -826,6 +842,7 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None, day_text: str | 
 
         final_entry, suggested_tags = launch_editor(
             state="Capturing update",
+            info_message=capture_info_message(day_text),
             rewrite=rewrite_callback,
             suggest_tags=suggest_callback,
         )

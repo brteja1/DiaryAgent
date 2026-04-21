@@ -882,10 +882,11 @@ def test_run_capture_interactive_exposes_rewrite_callback_and_saves_final_edit_v
     monkeypatch.setattr(agent, "ensure_storage", lambda: None)
 
     editor_calls = []
+    expected_info = diary_agent.capture_info_message()
 
-    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+    def fake_launch_editor(initial_text="", state="Capturing update", info_message=None, rewrite=None, suggest_tags=None):
         rewritten = rewrite("raw update") if rewrite is not None else initial_text
-        editor_calls.append((initial_text, state, rewritten))
+        editor_calls.append((initial_text, state, info_message, rewritten))
         return "- Final edited note\n\n### keep this heading", []
 
     monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
@@ -930,7 +931,7 @@ def test_run_capture_interactive_exposes_rewrite_callback_and_saves_final_edit_v
 
     assert exit_code == 0
     assert editor_calls == [
-        ("", "Capturing update", "- Rewritten note"),
+        ("", "Capturing update", expected_info, "- Rewritten note"),
     ]
     assert capsys.readouterr().out == "Updated 26_03_2026.md\n\n- Final edited note\n\n### keep this heading\n"
 
@@ -941,7 +942,9 @@ def test_run_capture_interactive_hides_llm_callbacks_when_model_missing(monkeypa
 
     editor_calls = {}
 
-    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+    def fake_launch_editor(initial_text="", state="Capturing update", info_message=None, rewrite=None, suggest_tags=None):
+        editor_calls["state"] = state
+        editor_calls["info_message"] = info_message
         editor_calls["rewrite"] = rewrite
         editor_calls["suggest_tags"] = suggest_tags
         return "- Final edited note", []
@@ -980,7 +983,12 @@ def test_run_capture_interactive_hides_llm_callbacks_when_model_missing(monkeypa
     exit_code = diary_agent.run_capture(agent)
 
     assert exit_code == 0
-    assert editor_calls == {"rewrite": None, "suggest_tags": None}
+    assert editor_calls == {
+        "state": "Capturing update",
+        "info_message": diary_agent.capture_info_message(),
+        "rewrite": None,
+        "suggest_tags": None,
+    }
 
 
 def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_draft(monkeypatch, tmp_path):
@@ -989,10 +997,11 @@ def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_dra
     monkeypatch.setattr(agent, "read_today_context", lambda: "## 09:15\n\n- Existing note")
 
     editor_calls = []
+    expected_info = diary_agent.capture_info_message()
 
-    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+    def fake_launch_editor(initial_text="", state="Capturing update", info_message=None, rewrite=None, suggest_tags=None):
         rewritten = rewrite("raw update") if rewrite is not None else initial_text
-        editor_calls.append((initial_text, state, rewritten))
+        editor_calls.append((initial_text, state, info_message, rewritten))
         return "- New note", []
 
     monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
@@ -1027,7 +1036,7 @@ def test_run_capture_interactive_rewrite_omits_existing_lines_from_rewritten_dra
 
     assert exit_code == 0
     assert editor_calls == [
-        ("", "Capturing update", "- New note"),
+        ("", "Capturing update", expected_info, "- New note"),
     ]
 
 
@@ -1037,9 +1046,12 @@ def test_run_capture_interactive_uses_requested_day_context_for_rewrite(monkeypa
     monkeypatch.setattr(agent, "read_day_context", lambda day_text=None: "## 09:15\n\n- Prior note" if day_text == "25_03_2026" else "")
 
     captured = {}
+    expected_info = diary_agent.capture_info_message("25_03_2026")
 
-    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+    def fake_launch_editor(initial_text="", state="Capturing update", info_message=None, rewrite=None, suggest_tags=None):
         captured["rewritten"] = rewrite("raw update") if rewrite is not None else initial_text
+        captured["state"] = state
+        captured["info_message"] = info_message
         return "- New note", []
 
     monkeypatch.setattr(diary_agent, "launch_editor", fake_launch_editor)
@@ -1073,14 +1085,18 @@ def test_run_capture_interactive_uses_requested_day_context_for_rewrite(monkeypa
     exit_code = diary_agent.run_capture(agent, day_text="25_03_2026")
 
     assert exit_code == 0
-    assert captured == {"rewritten": "- New note"}
+    assert captured == {
+        "rewritten": "- New note",
+        "state": "Capturing update",
+        "info_message": expected_info,
+    }
 
 
 def test_run_capture_interactive_prompts_for_tags_and_applies_them(monkeypatch, tmp_path):
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
     monkeypatch.setattr(agent, "ensure_storage", lambda: None)
     
-    def fake_launch_editor(initial_text="", state="Capturing update", rewrite=None, suggest_tags=None):
+    def fake_launch_editor(initial_text="", state="Capturing update", info_message=None, rewrite=None, suggest_tags=None):
         suggested = suggest_tags("- Final edited note") if suggest_tags else []
         return "- Final edited note", suggested
 

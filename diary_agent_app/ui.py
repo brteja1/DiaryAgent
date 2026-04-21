@@ -357,6 +357,7 @@ def prompt_for_section_tags(
 def launch_editor(
     initial_text: str = "",
     state: str = "Capturing update",
+    info_message: str | None = None,
     rewrite: Callable[[str], str] | None = None,
     suggest_tags: Callable[[str], list[str]] | None = None,
 ) -> tuple[str, list[str]]:
@@ -435,8 +436,9 @@ def launch_editor(
 
             event.app.create_background_task(suggest_task())
 
+        prompt_text = "Diary update> " if not info_message else f"{info_message}\nDiary update> "
         final_text = session.prompt(
-            "Diary update> ",
+            prompt_text,
             default=initial_text,
             key_bindings=bindings,
             bottom_toolbar=lambda: status_toolbar(
@@ -463,6 +465,8 @@ def launch_editor(
         return final_text, editor_state["suggested_tags"]
     except RuntimeError:
         # CLI fallback
+        if info_message:
+            print(info_message)
         print("Enter your diary update (Ctrl-D or empty line to finish):")
         lines = []
         while True:
