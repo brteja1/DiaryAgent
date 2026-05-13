@@ -175,6 +175,7 @@ class DiaryAgent:
 
     def append_entry(self, entry: str, day_text: str | None = None) -> tuple[Path, bool]:
         path = self.day_file(day_text)
+        entry = _normalize_todo_markdown_entry(entry, _todo_reference_base_date(day_text=day_text))
         existing = path.read_text(encoding="utf-8").rstrip() if path.exists() else ""
         new_lines = self.filter_new_entry_lines(entry, existing)
 
@@ -193,7 +194,10 @@ class DiaryAgent:
 
     def append_entry_verbatim(self, entry: str, day_text: str | None = None) -> tuple[Path, bool]:
         path = self.day_file(day_text)
-        rendered_entry = entry.rstrip()
+        rendered_entry = _normalize_todo_markdown_entry(
+            entry.rstrip(),
+            _todo_reference_base_date(day_text=day_text),
+        )
         if not rendered_entry.strip():
             return path, False
 
@@ -272,7 +276,8 @@ class DiaryAgent:
             for line in file_path.read_text(encoding="utf-8").splitlines():
                 match = TODO_RE.match(line)
                 if match:
-                    keys.add(normalize_todo_text(match.group("text")))
+                    todo_text, _due, _priority = core.parse_todo_details(match.group("text"))
+                    keys.add(normalize_todo_text(todo_text))
         return keys
 
     def dedupe_entry(self, entry: str) -> str:
@@ -286,7 +291,8 @@ class DiaryAgent:
                 filtered_lines.append(line)
                 continue
 
-            todo_key = normalize_todo_text(match.group("text"))
+            todo_text, _due, _priority = core.parse_todo_details(match.group("text"))
+            todo_key = normalize_todo_text(todo_text)
             if todo_key in existing_todos or todo_key in seen_new_todos:
                 continue
 
@@ -305,7 +311,8 @@ class DiaryAgent:
                 filtered_lines.append(line)
                 continue
 
-            similar_match = self.find_similar_open_todo(match.group("text").strip())
+            candidate_text, _due, _priority = core.parse_todo_details(match.group("text").strip())
+            similar_match = self.find_similar_open_todo(candidate_text)
             if similar_match is None:
                 filtered_lines.append(line)
                 continue
@@ -331,11 +338,14 @@ class DiaryAgent:
             ):
                 match = TODO_RE.match(line)
                 if match and match.group("state") == " ":
+                    todo_text, due, priority = core.parse_todo_details(match.group("text").strip())
                     tasks.append(
                         PendingTask(
                             file_path=file_path,
                             line_number=line_number,
-                            text=match.group("text").strip(),
+                            text=todo_text,
+                            due=due,
+                            priority=priority,
                         )
                     )
         return tasks
@@ -355,7 +365,14 @@ class DiaryAgent:
                 match = TODO_RE.match(line)
                 if not match or match.group("state") != " ":
                     continue
-                lines[index - 1] = f"{match.group('indent')}- [x] {match.group('text').strip()}"
+                todo_text, due, priority = core.parse_todo_details(match.group("text").strip())
+                lines[index - 1] = core.render_todo_line(
+                    match.group("indent"),
+                    "x",
+                    todo_text,
+                    due=due,
+                    priority=priority,
+                )
                 updates += 1
             file_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
         return updates
@@ -374,7 +391,14 @@ class DiaryAgent:
             return None
 
         new_state = " " if match.group("state") != " " else "x"
-        lines[line_number - 1] = f"{match.group('indent')}- [{new_state}] {match.group('text').strip()}"
+        todo_text, due, priority = core.parse_todo_details(match.group("text").strip())
+        lines[line_number - 1] = core.render_todo_line(
+            match.group("indent"),
+            new_state,
+            todo_text,
+            due=due,
+            priority=priority,
+        )
         new_content = "\n".join(lines).rstrip() + "\n"
         file_path.write_text(new_content, encoding="utf-8")
         return new_content.rstrip()
@@ -383,7 +407,8 @@ class DiaryAgent:
         """Replace the body of a specific section in the file."""
         if not file_path.exists():
             return None
-        
+
+        new_body = _normalize_todo_markdown_entry(new_body, _todo_reference_base_date(file_path=file_path))
         sections = self.parse_day_sections(file_path)
         found = False
         for i, s in enumerate(sections):
@@ -391,10 +416,10 @@ class DiaryAgent:
                 sections[i] = DiarySection(file_path=file_path, heading=heading, body=new_body.strip())
                 found = True
                 break
-        
+
         if not found:
             return None
-            
+
         new_content = ""
         for s in sections:
             new_content += f"## {s.heading}\n\n{s.body}\n\n"
@@ -590,6 +615,42 @@ def normalize_todo_text(text: str) -> str:
     return core.normalize_todo_text(text)
 
 
+def _todo_reference_base_date(day_text: str | None = None, file_path: Path | None = None) -> dt.date:
+    if file_path is not None:
+        try:
+            return dt.datetime.strptime(file_path.stem, DATE_FMT).date()
+        except ValueError:
+            pass
+    if day_text is not None:
+        normalized = parse_explicit_day_input(day_text)
+        return dt.datetime.strptime(normalized, DATE_FMT).date()
+    return dt.date.today()
+
+
+def _normalize_todo_markdown_entry(entry: str, base_date: dt.date) -> str:
+    normalized_lines: list[str] = []
+    for line in entry.splitlines():
+        match = TODO_RE.match(line)
+        if not match:
+            normalized_lines.append(line)
+            continue
+
+        todo_text, due, priority = core.parse_todo_details(match.group("text").strip())
+        todo_text = core.expand_todo_date_references(todo_text, base_date)
+        if due is not None:
+            due = core.expand_todo_date_references(due, base_date)
+        normalized_lines.append(
+            core.render_todo_line(
+                match.group("indent"),
+                match.group("state"),
+                todo_text,
+                due=due,
+                priority=priority,
+            )
+        )
+    return "\n".join(normalized_lines)
+
+
 def lines_are_redundant(first: str, second: str) -> bool:
     first_key = normalize_todo_text(first)
     second_key = normalize_todo_text(second)
@@ -699,7 +760,7 @@ def prompt_for_task_completion(agent: DiaryAgent) -> None:
     values = [
         (
             task.key,
-            f"{task.file_path.name}:{task.line_number}  {task.text}",
+            f"{task.file_path.name}:{task.line_number}  {task.display_text}",
         )
         for task in tasks
     ]
@@ -825,6 +886,7 @@ def capture_info_message(day_text: str | None = None) -> str:
 def run_capture(agent: DiaryAgent, raw_text: str | None = None, day_text: str | None = None) -> int:
     agent.ensure_storage()
     agent.day_file(day_text)
+    base_date = _todo_reference_base_date(day_text=day_text)
     if raw_text is None:
         adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
         all_tags = adapter.list_tags()
@@ -850,6 +912,7 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None, day_text: str | 
             print("No update captured.")
             return 0
 
+        final_entry = _normalize_todo_markdown_entry(final_entry, base_date)
         if day_text is None:
             path, appended = agent.append_entry_verbatim(final_entry)
         else:
@@ -881,6 +944,7 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None, day_text: str | 
         synthesized = agent.synthesize_entry(update_text)
     else:
         synthesized = agent.synthesize_entry(update_text, day_text=day_text)
+    synthesized = _normalize_todo_markdown_entry(synthesized, base_date)
     entry, skipped_matches = agent.review_entry_todos(synthesized, interactive=False)
     if entry:
         if day_text is None:
@@ -1465,7 +1529,7 @@ def run_todos(agent: DiaryAgent) -> int:
         # Fall back to CLI if prompt_toolkit not available
         print(f"Found {len(tasks)} pending todo(s):\n")
         for i, task in enumerate(tasks, 1):
-            print(f"  {i}. {task.text}")
+            print(f"  {i}. {task.display_text}")
             print(f"     [{task.file_path.name}:{task.line_number}]\n")
 
         selected_indices = input("Enter numbers to mark complete (comma-separated), or press Enter to skip: ").strip()

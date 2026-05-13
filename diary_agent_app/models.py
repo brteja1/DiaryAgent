@@ -9,10 +9,21 @@ class PendingTask:
     file_path: Path
     line_number: int
     text: str
+    due: str | None = None
+    priority: str | None = None
 
     @property
     def key(self) -> str:
         return f"{self.file_path}:{self.line_number}"
+
+    @property
+    def display_text(self) -> str:
+        parts = [self.text]
+        if self.due:
+            parts.append(f"[due: {self.due}]")
+        if self.priority:
+            parts.append(f"[priority: {self.priority}]")
+        return " ".join(parts)
 
 
 @dataclass(frozen=True)

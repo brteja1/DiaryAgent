@@ -264,9 +264,18 @@ The app scans all `*.md` files in the diary directory for unchecked tasks in thi
 - [ ] Example task
 ```
 
+Optional deadline and priority metadata can be added on the same line:
+
+```markdown
+- [ ] Example task [due: 2026-05-01] [priority: high]
+```
+
 Current behavior:
 
 - Open tasks can be marked complete as `- [x] ...`.
+- Optional TODO metadata is preserved when tasks are toggled complete.
+- The TODO list shows optional deadline and priority metadata when present.
+- Relative date words in TODOs, such as `tomorrow` or weekday names, are expanded to exact dates when the update is saved.
 - Exact duplicate TODOs are removed automatically.
 - Similar TODOs are checked against existing open tasks.
 - In interactive mode, the app asks whether to keep a similar TODO.

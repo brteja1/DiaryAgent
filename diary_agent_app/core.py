@@ -3,12 +3,46 @@ from __future__ import annotations
 import os
 import re
 import sys
+import datetime as dt
 from pathlib import Path
 from typing import Iterable, Sequence
 
 from .models import AppConfig, PendingTask
 
 TODO_RE = re.compile(r"^(?P<indent>\s*)- \[(?P<state>[ xX])\] (?P<text>.+?)\s*$")
+TODO_METADATA_SUFFIX_RE = re.compile(
+    r"\s*\[(?P<field>due|priority):\s*(?P<value>[^\]]+)\]\s*$",
+    re.IGNORECASE,
+)
+TODO_DATE_REFERENCE_RE = re.compile(
+    r"\b("
+    r"today|tomorrow|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun"
+    r")\b",
+    re.IGNORECASE,
+)
+WEEKDAY_NAME_TO_INDEX = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
+}
+WEEKDAY_ABBREVIATION_TO_NAME = {
+    "mon": "monday",
+    "tue": "tuesday",
+    "tues": "tuesday",
+    "wed": "wednesday",
+    "thu": "thursday",
+    "thur": "thursday",
+    "thurs": "thursday",
+    "fri": "friday",
+    "sat": "saturday",
+    "sun": "sunday",
+}
 DATE_FMT = "%d_%m_%Y"
 CONFIG_RELATIVE_PATH = Path(".config") / "diary_agent" / "config.txt"
 DEFAULT_HTFS_PATH_ENV = "DIARY_AGENT_HTFS_PATH"
@@ -19,7 +53,66 @@ def tokenize(text: str) -> list[str]:
 
 
 def normalize_todo_text(text: str) -> str:
-    return " ".join(tokenize(text))
+    base_text, _due, _priority = parse_todo_details(text)
+    return " ".join(tokenize(base_text))
+
+
+def parse_todo_details(text: str) -> tuple[str, str | None, str | None]:
+    base_text = text.strip()
+    due: str | None = None
+    priority: str | None = None
+
+    while True:
+        match = TODO_METADATA_SUFFIX_RE.search(base_text)
+        if match is None:
+            break
+
+        field = match.group("field").lower()
+        value = match.group("value").strip()
+        base_text = base_text[: match.start()].rstrip()
+
+        if field == "due":
+            due = value
+        elif field == "priority":
+            priority = value
+
+    return base_text, due, priority
+
+
+def expand_todo_date_references(text: str, base_date: dt.date) -> str:
+    def replace(match: re.Match[str]) -> str:
+        token = match.group(0).lower()
+        if token == "today":
+            target_date = base_date
+        elif token == "tomorrow":
+            target_date = base_date + dt.timedelta(days=1)
+        else:
+            weekday_name = WEEKDAY_ABBREVIATION_TO_NAME.get(token, token)
+            weekday_index = WEEKDAY_NAME_TO_INDEX[weekday_name]
+            days_ahead = (weekday_index - base_date.weekday()) % 7
+            target_date = base_date + dt.timedelta(days=days_ahead)
+        return target_date.strftime(DATE_FMT)
+
+    return TODO_DATE_REFERENCE_RE.sub(replace, text)
+
+
+def render_todo_details(due: str | None = None, priority: str | None = None) -> str:
+    details: list[str] = []
+    if due:
+        details.append(f"[due: {due}]")
+    if priority:
+        details.append(f"[priority: {priority}]")
+    return " " + " ".join(details) if details else ""
+
+
+def render_todo_line(
+    indent: str,
+    state: str,
+    text: str,
+    due: str | None = None,
+    priority: str | None = None,
+) -> str:
+    return f"{indent}- [{state}] {text.strip()}{render_todo_details(due, priority)}"
 
 
 def config_file_path(home: Path | None = None) -> Path:

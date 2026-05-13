@@ -87,7 +87,10 @@ This file describes the current implemented behavior of the diary agent in this 
 ## TODO Management
 
 - Scans all `*.md` files in the configured diary directory for unchecked tasks matching `- [ ] ...`.
+- Optional TODO metadata may be added inline on the same line as trailing fields like `[due: 2026-05-01]` and `[priority: high]`.
+- Relative date words in TODO text or due metadata are expanded to exact diary dates before the markdown is written.
 - Allows marking existing unchecked tasks as complete by rewriting them as `- [x] ...`.
+- Preserves optional TODO metadata when toggling task state.
 - TODO review flow now happens after note capture, not before it.
 - After capture, if pending TODOs exist, the user is asked whether to show them.
 - The TODO checklist screen opens only if the user chooses yes.
@@ -98,6 +101,7 @@ This file describes the current implemented behavior of the diary agent in this 
 - Dedicated subcommand for viewing/managing todos:
   - `python diary_agent.py todos`
 - Lists all pending todos with their source file and line number.
+- Shows optional deadline and priority metadata alongside each pending todo when present.
 - Allows selecting todos to mark complete by entering numbers.
 - Uses the shared checklist UI in the dedicated `todos` command (`prompt_for_task_completion`).
 

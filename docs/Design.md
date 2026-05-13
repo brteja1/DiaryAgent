@@ -193,6 +193,8 @@ TODO support is global across diary history.
 Unchecked TODOs are recognized by the Markdown pattern:
 
 - `- [ ] ...`
+- Optional inline metadata such as `[due: ...]` and `[priority: ...]` may follow the task text.
+- Relative date words in new TODO text are normalized to exact diary dates at write time.
 
 Completed TODOs are recognized by:
 
@@ -203,6 +205,7 @@ Completed TODOs are recognized by:
 - The system scans all configured diary Markdown files.
 - It displays open TODOs in a `prompt_toolkit` checkbox dialog (or numbered list in CLI fallback).
 - Selected TODOs are updated in place in their source files.
+- Optional deadline and priority metadata is preserved when a task is marked complete.
 
 ### CLI Subcommand
 

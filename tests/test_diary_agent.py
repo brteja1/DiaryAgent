@@ -346,6 +346,43 @@ def test_append_entry_verbatim_writes_final_text_without_flattening(tmp_path):
     )
 
 
+def test_append_entry_verbatim_expands_relative_todo_dates(tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    class FixedDateTime(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 3, 25, 14, 30)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(diary_agent.dt, "datetime", FixedDateTime)
+    try:
+        path, appended = agent.append_entry_verbatim(
+            "- [ ] Call mom tomorrow\n"
+            "- [ ] Meet Monday [due: Friday]\n",
+            day_text="25_03_2026",
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert appended is True
+    assert path.read_text(encoding="utf-8") == (
+        "## 14:30\n\n"
+        "- [ ] Call mom 26_03_2026\n"
+        "- [ ] Meet 30_03_2026 [due: 27_03_2026]\n"
+    )
+
+
+def test_update_section_expands_relative_todo_dates_using_file_date(tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    file_path = tmp_path / "25_03_2026.md"
+    file_path.write_text("## 09:00\n\n- [ ] Follow up tomorrow\n", encoding="utf-8")
+
+    updated = agent.update_section(file_path, "09:00", "- [ ] Follow up tomorrow")
+
+    assert updated == "## 09:00\n\n- [ ] Follow up 26_03_2026"
+    assert file_path.read_text(encoding="utf-8") == "## 09:00\n\n- [ ] Follow up 26_03_2026\n"
+
+
 def test_parse_day_sections_returns_timestamp_sections_with_stable_ids(tmp_path):
     file_path = tmp_path / "26_03_2026.md"
     file_path.write_text(
@@ -1336,7 +1373,7 @@ def test_read_today_context_returns_existing_daily_content(tmp_path):
 
 def test_scan_pending_tasks_reads_unchecked_todos_from_all_markdown_files(tmp_path):
     (tmp_path / "25_03_2026.md").write_text(
-        "- [ ] first task\n- [x] done task\n",
+        "- [ ] first task [due: 2026-04-01] [priority: high]\n- [x] done task\n",
         encoding="utf-8",
     )
     (tmp_path / "26_03_2026.md").write_text(
@@ -1348,16 +1385,16 @@ def test_scan_pending_tasks_reads_unchecked_todos_from_all_markdown_files(tmp_pa
 
     tasks = agent.scan_pending_tasks()
 
-    assert [(task.file_path.name, task.line_number, task.text) for task in tasks] == [
-        ("25_03_2026.md", 1, "first task"),
-        ("26_03_2026.md", 2, "second task"),
+    assert [(task.file_path.name, task.line_number, task.text, task.due, task.priority) for task in tasks] == [
+        ("25_03_2026.md", 1, "first task", "2026-04-01", "high"),
+        ("26_03_2026.md", 2, "second task", None, None),
     ]
 
 
 def test_mark_tasks_complete_rewrites_selected_unchecked_tasks(tmp_path):
     file_path = tmp_path / "26_03_2026.md"
     file_path.write_text(
-        "- [ ] first task\n- [ ] second task\n- [x] already done\n",
+        "- [ ] first task [due: 2026-04-01] [priority: high]\n- [ ] second task\n- [x] already done\n",
         encoding="utf-8",
     )
     agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
@@ -1367,8 +1404,67 @@ def test_mark_tasks_complete_rewrites_selected_unchecked_tasks(tmp_path):
 
     assert updated == 1
     assert file_path.read_text(encoding="utf-8") == (
-        "- [ ] first task\n- [x] second task\n- [x] already done\n"
+        "- [ ] first task [due: 2026-04-01] [priority: high]\n- [x] second task\n- [x] already done\n"
     )
+
+
+def test_dedupe_entry_ignores_optional_todo_metadata(tmp_path):
+    (tmp_path / "25_03_2026.md").write_text(
+        "- [ ] Buy milk [due: tomorrow]\n",
+        encoding="utf-8",
+    )
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+
+    deduped = agent.dedupe_entry(
+        "- [ ] buy milk! [priority: high]\n"
+        "- [ ] Call mom [due: Friday]\n"
+        "- regular note\n"
+    )
+
+    assert deduped == "- [ ] Call mom [due: Friday]\n- regular note"
+
+
+def test_prompt_for_task_completion_shows_optional_metadata(monkeypatch, tmp_path):
+    agent = diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model")
+    task = diary_agent.PendingTask(
+        file_path=tmp_path / "26_03_2026.md",
+        line_number=4,
+        text="Submit report",
+        due="2026-04-01",
+        priority="high",
+    )
+
+    monkeypatch.setattr(agent, "scan_pending_tasks", lambda: [task])
+    monkeypatch.setattr(diary_agent.ui, "require_prompt_toolkit", lambda: None)
+
+    captured = {}
+
+    class FakeDialog:
+        def run(self):
+            captured["values"] = captured.get("values")
+            return [task.key]
+
+    def fake_checkboxlist_dialog(*args, **kwargs):
+        captured["values"] = kwargs["values"]
+        return FakeDialog()
+
+    class FakeMessageDialog:
+        def run(self):
+            captured["message_dialog"] = True
+
+    monkeypatch.setattr(diary_agent.ui, "checkboxlist_dialog", fake_checkboxlist_dialog)
+    monkeypatch.setattr(diary_agent.ui, "message_dialog", lambda *args, **kwargs: FakeMessageDialog())
+    monkeypatch.setattr(agent, "mark_tasks_complete", lambda selected: len(selected))
+
+    diary_agent.prompt_for_task_completion(agent)
+
+    assert captured["values"] == [
+        (
+            task.key,
+            f"{task.file_path.name}:{task.line_number}  Submit report [due: 2026-04-01] [priority: high]",
+        )
+    ]
+    assert captured["message_dialog"] is True
 
 
 def test_dedupe_entry_removes_existing_and_new_duplicate_open_todos(tmp_path):
@@ -1957,6 +2053,285 @@ def test_show_diary_entry_wraps_read_only_content(monkeypatch):
     ui.show_diary_entry("05_03_2026.md", "## 14:30\nA very long line that should wrap in the show screen.")
 
     assert captured["show_text_area"]["wrap_lines"] is True
+
+
+def test_show_diary_entry_wires_navigation_edit_tag_and_delete_callbacks(monkeypatch):
+    state = {
+        "previous_calls": [],
+        "next_calls": [],
+        "toggle_calls": [],
+        "editor_calls": [],
+        "editor_suggestions": [],
+        "prompt_calls": [],
+        "set_tags_calls": [],
+        "delete_calls": [],
+        "delete_confirm_in_thread": None,
+        "invalidations": 0,
+    }
+    captured = {}
+    tag_state = {
+        "05_03_2026.md": {
+            "09:00": ["Project/DiaryAgent"],
+            "10:00": [],
+        }
+    }
+
+    class FakeEventHook:
+        def __iadd__(self, _handler):
+            return self
+
+    class FakeDocument:
+        def __init__(self):
+            self.cursor_position_row = 0
+
+    class FakeBuffer:
+        def __init__(self):
+            self.cursor_position = 0
+            self.document = FakeDocument()
+            self.on_text_changed = FakeEventHook()
+
+        def validate_and_handle(self):
+            captured["validated"] = True
+
+    class FakeTextArea:
+        def __init__(self, *args, **kwargs):
+            self.text = kwargs.get("text", "")
+            self.buffer = FakeBuffer()
+            if kwargs.get("read_only") is True:
+                captured["show_text_area"] = self
+                captured["show_text_area_kwargs"] = kwargs
+            else:
+                captured["query_input"] = self
+                captured["query_input_kwargs"] = kwargs
+
+    class FakeCondition:
+        def __init__(self, _fn):
+            pass
+
+        def __invert__(self):
+            return self
+
+    class FakeKeyBindings:
+        def __init__(self):
+            self.bindings = {}
+
+        def add(self, *args, **kwargs):
+            def decorator(func):
+                self.bindings[tuple(args)] = func
+                return func
+
+            return decorator
+
+    class FakeFrame:
+        def __init__(self, body, title=None):
+            self.body = body
+            self.title = title
+            captured.setdefault("frames", []).append(self)
+
+    class FakeWindow:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+
+    class FakeLayout:
+        def __init__(self, root, focused_element=None):
+            self.root = root
+            self.focused_element = focused_element
+            self.focused = []
+
+        def focus(self, element):
+            self.focused.append(element)
+
+    class FakeApplication:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.layout = kwargs["layout"]
+
+        def invalidate(self):
+            state["invalidations"] += 1
+
+        def exit(self, *args, **kwargs):
+            captured["exit"] = (args, kwargs)
+
+        def run(self):
+            bindings = self.kwargs["key_bindings"].bindings
+            text_area = captured["show_text_area"]
+            event = type("Event", (), {})()
+            event.app = self
+            event.current_buffer = text_area.buffer
+
+            bindings[("[",)](event)
+            bindings[("]",)](event)
+
+            text_area.buffer.document.cursor_position_row = 1
+            bindings[("space",)](event)
+
+            text_area.buffer.document.cursor_position_row = 1
+            asyncio.run(bindings[("e",)](event))
+
+            text_area.buffer.document.cursor_position_row = 1
+            asyncio.run(bindings[("t",)](event))
+
+            text_area.buffer.document.cursor_position_row = 1
+            asyncio.run(bindings[("d",)](event))
+
+    async def fake_run_in_terminal(callback):
+        return callback()
+
+    def fake_launch_editor(
+        initial_text="",
+        editor_state="Capturing update",
+        info_message=None,
+        rewrite=None,
+        suggest_tags=None,
+        **_kwargs,
+    ):
+        editor_state = _kwargs.get("state", editor_state)
+        state_data = {
+            "initial_text": initial_text,
+            "state": editor_state,
+            "info_message": info_message,
+            "suggest_tags_result": suggest_tags(initial_text) if suggest_tags is not None else [],
+        }
+        state["editor_calls"].append(state_data)
+        state["editor_suggestions"] = state_data["suggest_tags_result"]
+        return "- [x] Draft the release note\n- revised detail", []
+
+    def fake_prompt_for_section_tags(all_tags, top_level_tags, all_paths, initial_tags=[]):
+        state["prompt_calls"].append(
+            {
+                "all_tags": list(all_tags),
+                "top_level_tags": list(top_level_tags),
+                "all_paths": list(all_paths),
+                "initial_tags": list(initial_tags),
+            }
+        )
+        return ["Project/DiaryAgent", "Topic/Retrieval"]
+
+    def fake_button_dialog(*args, **kwargs):
+        class FakeDialog:
+            def run(self, *run_args, **run_kwargs):
+                state["delete_confirm_in_thread"] = run_kwargs.get("in_thread")
+                return True
+
+        return FakeDialog()
+
+    def previous_entry(current_title):
+        state["previous_calls"].append(current_title)
+        return "04_03_2026.md", "## 08:00\n- earlier note"
+
+    def next_entry(current_title):
+        state["next_calls"].append(current_title)
+        return "05_03_2026.md", initial_body
+
+    def toggle_todo(current_title, line_no):
+        state["toggle_calls"].append((current_title, line_no))
+        return (
+            "## 09:00\n"
+            "- [x] Draft the release note\n"
+            "- details\n\n"
+            "## 10:00\n"
+            "- later note"
+        )
+
+    def update_section(current_title, heading, new_body):
+        state["updated_section"] = (current_title, heading, new_body)
+        return (
+            f"## {heading}\n"
+            f"{new_body}\n\n"
+            "## 10:00\n"
+            "- later note"
+        )
+
+    def set_tags(current_title, heading, new_tags):
+        state["set_tags_calls"].append((current_title, heading, list(new_tags)))
+        tag_state[current_title][heading] = list(new_tags)
+
+    def get_tags(current_title):
+        return tag_state.get(current_title, {})
+
+    def get_all_tags():
+        return (
+            ["Project/DiaryAgent", "Topic/Retrieval"],
+            ["Project", "Topic"],
+            ["Project/DiaryAgent", "Topic/Retrieval"],
+        )
+
+    def delete_section(current_title, heading):
+        state["delete_calls"].append((current_title, heading))
+        return "## 10:00\n- later note"
+
+    initial_body = (
+        "## 09:00\n"
+        "- [ ] Draft the release note\n"
+        "- details\n\n"
+        "## 10:00\n"
+        "- later note"
+    )
+
+    monkeypatch.setattr(ui, "require_prompt_toolkit", lambda: None)
+    monkeypatch.setattr(ui, "TextArea", FakeTextArea)
+    monkeypatch.setattr(ui, "Condition", FakeCondition)
+    monkeypatch.setattr(ui, "KeyBindings", FakeKeyBindings)
+    monkeypatch.setattr(ui, "Frame", FakeFrame)
+    monkeypatch.setattr(ui, "Window", FakeWindow)
+    monkeypatch.setattr(ui, "FormattedTextControl", lambda *args, **kwargs: ("formatted", args, kwargs))
+    monkeypatch.setattr(ui, "ConditionalContainer", lambda *args, **kwargs: ("conditional", args, kwargs))
+    monkeypatch.setattr(ui, "HSplit", lambda children: ("hsplit", children))
+    monkeypatch.setattr(ui, "Box", lambda body, padding=0: ("box", body, padding))
+    monkeypatch.setattr(ui, "Layout", FakeLayout)
+    monkeypatch.setattr(ui, "Application", FakeApplication)
+    monkeypatch.setattr(ui, "HTML", lambda text: text)
+    monkeypatch.setattr(ui, "run_in_terminal", fake_run_in_terminal)
+    monkeypatch.setattr(ui, "launch_editor", fake_launch_editor)
+    monkeypatch.setattr(ui, "prompt_for_section_tags", fake_prompt_for_section_tags)
+    monkeypatch.setattr(ui, "button_dialog", fake_button_dialog)
+
+    ui.show_diary_entry(
+        "05_03_2026.md",
+        initial_body,
+        previous_entry=previous_entry,
+        next_entry=next_entry,
+        get_tags=get_tags,
+        toggle_todo=toggle_todo,
+        update_section=update_section,
+        set_tags=set_tags,
+        get_all_tags=get_all_tags,
+        suggest_tags=lambda text: ["Topic/Retrieval"],
+        delete_section=delete_section,
+    )
+
+    assert state["previous_calls"] == ["05_03_2026.md"]
+    assert state["next_calls"] == ["04_03_2026.md"]
+    assert state["toggle_calls"] == [("05_03_2026.md", 2)]
+    assert state["editor_calls"] == [
+        {
+            "initial_text": "- [x] Draft the release note\n- details",
+            "state": "Editing 09:00",
+            "info_message": None,
+            "suggest_tags_result": ["Topic/Retrieval"],
+        }
+    ]
+    assert state["updated_section"] == (
+        "05_03_2026.md",
+        "09:00",
+        "- [x] Draft the release note\n- revised detail",
+    )
+    assert state["prompt_calls"] == [
+        {
+            "all_tags": ["Project/DiaryAgent", "Topic/Retrieval"],
+            "top_level_tags": ["Project", "Topic"],
+            "all_paths": ["Project/DiaryAgent", "Topic/Retrieval"],
+            "initial_tags": ["Project/DiaryAgent"],
+        }
+    ]
+    assert state["set_tags_calls"] == [
+        ("05_03_2026.md", "09:00", ["Project/DiaryAgent", "Topic/Retrieval"])
+    ]
+    assert state["delete_calls"] == [("05_03_2026.md", "09:00")]
+    assert state["delete_confirm_in_thread"] is True
+    assert captured["frames"][0].title == "05_03_2026.md"
+    assert captured["show_text_area"].text == "## 10:00\n- later note"
 
 
 def test_run_show_day_reports_missing_file(monkeypatch, tmp_path, capsys):
