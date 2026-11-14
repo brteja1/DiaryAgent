@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from pathlib import Path
 from typing import Sequence
 
 from .models import SearchResult
@@ -27,16 +26,30 @@ def require_ollama() -> None:
         )
 
 
+class OllamaUnavailable(RuntimeError):
+    """Transport/model failure, distinct from a missing Python dependency."""
+
+
+def _chat(model: str, messages: Sequence[dict[str, str]]) -> str:
+    require_ollama()
+    try:
+        response = ollama.chat(model=model, messages=messages)
+    except Exception as exc:
+        raise OllamaUnavailable(OLLAMA_UNAVAILABLE_MESSAGE) from exc
+    return response["message"]["content"]
+
+
 def synthesize_entry(
     model: str,
     raw_update: str,
     today_context: str,
     now: dt.datetime | None = None,
 ) -> str:
-    require_ollama()
 
     now = now or dt.datetime.now()
-    context_excerpt = today_context[-4000:] if today_context else "(No existing notes today.)"
+    context_excerpt = (
+        today_context[-4000:] if today_context else "(No existing notes today.)"
+    )
     messages = [
         {
             "role": "system",
@@ -56,17 +69,14 @@ def synthesize_entry(
         {
             "role": "user",
             "content": (
-                "Timestamp: " + now.strftime('%Y-%m-%d %H:%M:%S') + "\n"
+                "Timestamp: " + now.strftime("%Y-%m-%d %H:%M:%S") + "\n"
                 "Today's existing notes:\n" + context_excerpt + "\n\n"
                 "Raw update:\n" + raw_update.strip()
             ),
         },
     ]
-    try:
-        response = ollama.chat(model=model, messages=messages)
-    except Exception as exc:
-        raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
-    return strip_generated_headings(response["message"]["content"])
+    content = _chat(model=model, messages=messages)
+    return strip_generated_headings(content)
 
 
 def strip_generated_headings(text: str) -> str:
@@ -79,7 +89,6 @@ def strip_generated_headings(text: str) -> str:
 
 
 def answer_query(model: str, query: str, matches: Sequence[SearchResult]) -> str:
-    require_ollama()
     if not matches:
         return "No relevant diary history found."
 
@@ -92,27 +101,24 @@ def answer_query(model: str, query: str, matches: Sequence[SearchResult]) -> str
         )
         for match in matches
     )
-    try:
-        response = ollama.chat(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You answer questions about diary history using only the supplied excerpts. "
-                        "Use section tags as additional context when they are provided. "
-                        "Be concise, cite file names inline, and say when the excerpts are insufficient."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"Question: {query}\n\nDiary excerpts:\n{excerpts}",
-                },
-            ],
-        )
-    except Exception as exc:
-        raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
-    return response["message"]["content"].strip()
+    content = _chat(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You answer questions about diary history using only the supplied excerpts. "
+                    "Use section tags as additional context when they are provided. "
+                    "Be concise, cite file names inline, and say when the excerpts are insufficient."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Question: {query}\n\nDiary excerpts:\n{excerpts}",
+            },
+        ],
+    )
+    return content.strip()
 
 
 def tag_expression_from_natural_language(
@@ -120,45 +126,43 @@ def tag_expression_from_natural_language(
     request: str,
     available_tags: Sequence[str],
 ) -> str:
-    require_ollama()
     if not available_tags:
         return ""
 
-    try:
-        response = ollama.chat(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You convert a natural-language request into an HTFS tag expression. "
-                        "Use only the provided tags. "
-                        "HTFS expressions use &, |, ~, and parentheses. "
-                        "Return only a valid tag expression. "
-                        "If none of the provided tags fit, return an empty string."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Available tags:\n"
-                        + "\n".join(available_tags)
-                        + "\n\nRequest:\n"
-                        + request.strip()
-                    ),
-                },
-            ],
-        )
-    except Exception as exc:
-        raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
+    content = _chat(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You convert a natural-language request into an HTFS tag expression. "
+                    "Use only the provided tags. "
+                    "HTFS expressions use &, |, ~, and parentheses. "
+                    "Return only a valid tag expression. "
+                    "If none of the provided tags fit, return an empty string."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Available tags:\n"
+                    + "\n".join(available_tags)
+                    + "\n\nRequest:\n"
+                    + request.strip()
+                ),
+            },
+        ],
+    )
 
-    return response["message"]["content"].strip()
+    return content.strip()
 
 
-def todos_are_semantically_similar(model: str, candidate_text: str, existing_text: str) -> bool:
+def todos_are_semantically_similar(
+    model: str, candidate_text: str, existing_text: str
+) -> bool:
     require_ollama()
     try:
-        response = ollama.chat(
+        content = _chat(
             model=model,
             messages=[
                 {
@@ -180,43 +184,41 @@ def todos_are_semantically_similar(model: str, candidate_text: str, existing_tex
                 },
             ],
         )
-    except Exception:
+    except OllamaUnavailable:
         return False
-    verdict = response["message"]["content"].strip().upper()
+    verdict = content.strip().upper()
     return verdict.startswith("YES")
 
 
-def suggest_section_tags(model: str, section_body: str, available_tags: Sequence[str]) -> list[str]:
-    require_ollama()
+def suggest_section_tags(
+    model: str, section_body: str, available_tags: Sequence[str]
+) -> list[str]:
     if not available_tags:
         return []
 
-    try:
-        response = ollama.chat(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You suggest relevant tags for a diary section using only the provided tag list. "
-                        "Return a comma-separated list of exact tag names from the provided list. "
-                        "Do not invent tags, do not explain your answer, and return an empty string if none apply."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Available tags:\n"
-                        + "\n".join(available_tags)
-                        + "\n\nDiary section:\n"
-                        + section_body.strip()
-                    ),
-                },
-            ],
-        )
-    except Exception as exc:
-        raise RuntimeError(OLLAMA_UNAVAILABLE_MESSAGE) from exc
+    content = _chat(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You suggest relevant tags for a diary section using only the provided tag list. "
+                    "Return a comma-separated list of exact tag names from the provided list. "
+                    "Do not invent tags, do not explain your answer, and return an empty string if none apply."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Available tags:\n"
+                    + "\n".join(available_tags)
+                    + "\n\nDiary section:\n"
+                    + section_body.strip()
+                ),
+            },
+        ],
+    )
 
-    suggested = [part.strip() for part in response["message"]["content"].split(",") if part.strip()]
+    suggested = [part.strip() for part in content.split(",") if part.strip()]
     available = {tag: tag for tag in available_tags}
     return [available[tag] for tag in suggested if tag in available]

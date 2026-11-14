@@ -4,19 +4,24 @@ This document describes the current implementation and the architectural changes
 
 ## Current module boundaries
 
-| Module | Current responsibilities |
+| Module | Responsibilities |
 | --- | --- |
-| [`diary_agent.py`](../diary_agent.py) | CLI routing, `DiaryAgent`, file/section operations, TODO orchestration, search composition and compatibility wrappers. It still contains substantial domain/storage logic. |
-| [`core.py`](../diary_agent_app/core.py) | Config parsing/prompting/I/O, date/TODO helpers, tokenization, lexical scoring and shortlisting. It is not wholly side-effect-free. |
-| [`models.py`](../diary_agent_app/models.py) | Frozen `AppConfig`, `PendingTask`, `SimilarTodoMatch`, `DiaryEntryOption`, `DiarySection` and `SearchResult` records. Config has diary directory and optional model. |
-| [`llm.py`](../diary_agent_app/llm.py) | Ollama calls for LLM-01's five tasks, prompts, heading cleanup and model errors. |
-| [`htfs_adapter.py`](../diary_agent_app/htfs_adapter.py) | Bundled import/origin validation, client lifecycle, resource mapping, hierarchy/tag operations and queries. |
-| [`ui.py`](../diary_agent_app/ui.py) | Editor, dialogs, viewer, picker, tag completion, background feedback and event-loop-safe subsidiary prompts. |
-| [`deps/HTFS`](../deps/HTFS) | Pinned upstream backend owning SQLite/RDF tag storage and hierarchy/query semantics. |
-| [`tests/test_diary_agent.py`](../tests/test_diary_agent.py) | Application regressions and temporary-boundary HTFS integration checks. |
-| [`check_consistency.py`](../scripts/specification/check_consistency.py) | Independent finite contract models, not an implementation oracle. |
+| [`diary_agent.py`](../diary_agent.py) | Stable executable entrypoint and `DiaryAgent` import. |
+| [`cli.py`](../diary_agent_app/cli.py) | Argument parsing, mandatory startup preflight, dispatch and exit status. |
+| [`commands.py`](../diary_agent_app/commands.py) | User workflows, terminal confirmations and command output. |
+| [`service.py`](../diary_agent_app/service.py) | `DiaryAgent`: storage, navigation, TODO and search operations; no terminal UI dependency. |
+| [`markdown.py`](../diary_agent_app/markdown.py) | One timestamp parser, immutable source spans, unique lookup and localized mutation. Reads/writes retain line endings. |
+| [`core.py`](../diary_agent_app/core.py) | Config I/O, date/TODO parsing, lexical scoring and shortlisting. |
+| [`models.py`](../diary_agent_app/models.py) | Shared immutable records; pending tasks carry their source snapshot. |
+| [`llm.py`](../diary_agent_app/llm.py) | Five task-specific prompts over one Ollama transport/error boundary. |
+| [`htfs_adapter.py`](../diary_agent_app/htfs_adapter.py) | The sole HTFS boundary; one context manager closes every backend session. |
+| [`ui.py`](../diary_agent_app/ui.py) | Capture editor, proposal review, dialogs, tag completion and shared background-action lifecycle. |
+| [`viewer.py`](../diary_agent_app/viewer.py) | Read-only viewer, picker and explicit navigation/mutation key bindings. |
+| [`deps/HTFS`](../deps/HTFS) | Pinned backend owning SQLite/RDF storage and tag hierarchy/query semantics. |
 
-HTFS access stays behind the adapter. UI code uses callbacks; domain policy should not gain terminal dependencies. Improve these boundaries incrementally without a new framework or incidental storage migration.
+Dependencies flow from the entrypoint to CLI, commands, and domain/UI boundaries. The service uses core, Markdown, models, LLM and HTFS; it does not import commands or UI. Viewer/editor use callbacks for domain operations. No generic repository, transaction framework or algebraic class hierarchy was introduced.
+
+The [discovery report](Refactoring.md) records duplication counts and abstraction choices. [Testing.md](Testing.md) records behavior coverage, removed tests and mathematical mappings. The finite specification checker remains independent of application tests.
 
 ## Current startup
 
@@ -30,30 +35,25 @@ Ollama/model availability and prompt_toolkit presentation are optional. Their wo
 
 Diary content is UTF-8 Markdown. Filenames supply dates; recognized timestamp headings delimit sections. `DiarySection.section_id` derives filename/heading identity; HTFS resources use absolute file paths plus heading fragments. Metadata stays in `.tagfs.db` and `.tagfs.ttl` in the diary boundary, outside dependency source.
 
-`run_capture` selects an editor/stdin path or `--text`. A successful interactive save is followed by section tagging, never a TODO-review prompt. Current saves still normalize checkbox dates and trim text; processed capture also filters duplicates, and model-enabled `--text` synthesizes automatically. These behaviors do not yet satisfy D-01.
+`run_capture` selects the editor/stdin path or `--text`. Final saves share verbatim persistence. An editor rewrite shows the complete candidate in the locked buffer: `Alt+Y` accepts, `Alt+N` restores the original draft. Submit and overlapping actions are blocked while work or proposal review is active. One shared background helper releases the work lock on success/failure. Tag suggestions leave text unchanged.
 
-`run_todos` scans checkbox lines across immediate Markdown files and uses the shared checklist or numeric-input fallback. Task locations currently use source paths and one-based line numbers. D-11 metadata and D-12 selection contracts are approved but pending implementation; the current numeric path can prompt unattended and silently ignore out-of-range indices, and completion lacks snapshot guards.
+TTY `--text` may generate a proposal and asks for acceptance after all cleanup. Decline/failure saves the original. Unattended capture saves original text without requesting an LLM transformation. Successful editor capture offers tags afterwards; capture never opens TODO review.
 
-`run_show_day` handles day lookup, missing-today substitution and viewer callbacks. The text area is read-only for typing; explicit actions mutate content/tags. Subsidiary prompts use suspended terminal rendering and thread mode where needed. Current filename sorting, section reconstruction and tag-dialog result encoding need the approved fixes below.
+`run_todos` lists without prompting in non-TTY mode. Interactive checklist/numeric selection uses tasks scanned once. Numeric input validates the whole selection. Before any write, the service rereads affected files and checks their source snapshots and selected open-checkbox locations. State changes splice only the checkbox character, retaining metadata, whitespace and line endings. There is no isolation against changes after validation or atomicity across file writes.
+
+Navigation parses valid calendar-date filenames separately from all-Markdown history scans. `DiaryDocument` retains offsets into the original text, including preambles and CRLF. Edits replace only the body span and deletion removes only the selected section span. Duplicate IDs remain readable but unique lookup guards section mutations.
+
+Tag dialogs return `None` for cancellation and a list for accepted selections, including `[]` for an explicit clear. Viewer callers branch on presence rather than truthiness. Backend session cleanup is centralized; backend errors are not converted into successful results.
 
 Search scores section-body chunks and tags, optionally restricting section IDs through HTFS. No-model queries print local results; answer-synthesis failures can fall back to the same excerpts. Tag-filter translation/query failures do not silently become unfiltered searches. HTFS read errors propagate rather than appearing as absent tags.
 
-The five LLM operations are rewrite/TODO classification, TODO similarity, answer synthesis, explicit tag suggestions and natural-language filter translation. Rewrite cleanup strips generated headings and preserves useful nested bullets. The current editor applies the returned rewrite directly; D-01 requires a separate review/acceptance state for the complete proposal.
+The five LLM operations are rewrite/TODO classification, TODO similarity, answer synthesis, explicit tag suggestions and natural-language filter translation. Rewrite cleanup strips generated headings and preserves useful nested bullets. Proposal cleanup happens before review; persistence does not repeat it.
 
-## Changes required by decided targets
+## Remaining implementation work
 
-| Target | Current gap | Intended implementation responsibility |
-| --- | --- | --- |
-| D-01; CAP-04/06/10–13, TODO-02/04–05 | Immediate rewrite replacement and automatic save-time transformation. | Generate/clean a complete candidate before consent; persist the final user-controlled body unchanged. |
-| D-04; DATA-06, VIEW-03 | Shared filename-sorted navigation/picker list. | Separate all-Markdown scans from valid-dated-file selection; use calendar comparison. |
-| D-05; DATA-07–09 | First-match lookup can hide duplicate headings. | Distinguish missing/unique/ambiguous targets; block ambiguous operations while preserving raw viewing/content. |
-| D-06; VIEW-08–09 | Mutation reconstructs files from parsed sections. | Retain exact source spans and preserve all bytes outside a safely located target. |
-| D-08; PERSIST-01–05 | HTFS-first deletion, suppressed cleanup errors and replacement without recovery records. | Record intent/prior tags, commit combined content changes first, reconcile/verify metadata, and expose safe retry/completion receipts. |
-| D-09; TAG-07 | Cancellation and accepted-empty both return `[]`. | Use distinct outcomes; cancellation calls no mutation, accepted selection enters recovery-aware replacement. |
-| D-11; TODO-02/08 | Current helpers mechanically expand dates in both open and completed checkboxes, emit underscore dates and accept metadata without structured validation. | Generate `DD-MM-YYYY` only in accepted proposals for open tasks; validate known date/priority forms without rewriting legacy text. Preserve completed dates and invalid/unknown metadata. |
-| D-12; TODO-03/09/10 | TTY assumptions, partial acceptance of invalid selections and line-number-only mutation. | Route non-TTY `todos` to listing only. Validate all selections before writing and compare affected-file snapshots plus raw selected tasks; reject stale state for refresh/reselection. Snapshot guards do not imply multi-file atomicity or race isolation. |
+D-01 consent/verbatim paths, D-04 calendar selection, D-05 uniqueness guards, D-06 byte preservation, D-09 distinct selection outcomes and D-12 selection guards have focused acceptance coverage. D-09 metadata failures still require D-08 recovery. D-11 open-task proposal expansion now emits `DD-MM-YYYY` and leaves completed tasks alone; validated versus unvalidated metadata presentation is still pending.
 
-D-02 routing, D-03's task inventory and D-07's mandatory dependency agree with their selected contracts. D-10 changes document roles, not runtime architecture.
+D-08 remains an architectural gap: there is no recovery journal or retry/receipt command, deletion still performs metadata cleanup before the content write, and tag replacement can partially fail after clearing old associations. Do not describe these operations as atomic or safely retryable. These gaps require a persistence-focused change with fault-injection acceptance tests.
 
 ## Recovery design boundary
 

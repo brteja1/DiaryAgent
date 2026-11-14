@@ -645,9 +645,9 @@ def main():
               Path("docs/specification/MathematicalModel.md"),
               Path("docs/specification/ConsistencyReview.md"), Path("docs/HTFS.md"),
               Path(".gitmodules"), Path("requirements.txt"), Path("Makefile"), Path("pytest.ini"),
-              Path("diary_agent.py"), Path("diary_agent_app/core.py"),
-              Path("diary_agent_app/models.py"), Path("diary_agent_app/htfs_adapter.py"),
-              Path("tests/test_diary_agent.py")]
+              Path("diary_agent.py"), Path("docs/Testing.md"), Path("docs/Refactoring.md")]
+    inputs += sorted(p.relative_to(ROOT) for p in (ROOT / "diary_agent_app").glob("*.py"))
+    inputs += sorted(p.relative_to(ROOT) for p in (ROOT / "tests").glob("*.py"))
     hashes = {str(p): digest(ROOT / p) for p in inputs}
     hashes[str(Path(__file__).relative_to(ROOT))] = digest(Path(__file__))
     catalog_hashes = {f"concepts/{name}.md": digest(args.catalog_root / "concepts" / f"{name}.md")

@@ -12,12 +12,12 @@ The specification includes approved targets that are not yet implemented. Curren
 | --- | --- |
 | Mandatory bundled HTFS (D-07) | Implemented, including startup validation and integration tests. |
 | TODO review (D-02) and five LLM tasks (D-03) | Current routing/task inventory agrees with the decisions. |
-| Consent and verbatim saves (D-01) | Pending: code still applies rewrite output directly and normalizes/trims/filters content in save paths. |
-| Calendar navigation, identity guards and byte preservation (D-04–06) | Pending: lexical ordering, first-match lookup and whole-file reconstruction require correction. |
-| Recovery and tag cancellation (D-08–09) | Pending: no recovery journal/retry mechanism; cancellation and accepted-empty still need distinct UI results. |
+| Consent and verbatim saves (D-01) | Implemented save/consent paths, with focused acceptance tests. |
+| Calendar navigation, identity guards and byte preservation (D-04–06) | Implemented using parsed dates, uniqueness guards and exact source spans. |
+| Recovery and tag cancellation (D-08–09) | Cancellation/accepted-empty distinguished. Recovery journal/retry remains pending. |
 | Documentation authority (D-10) | Applied in the documentation. |
-| TODO metadata (D-11) | Approved; generated `DD-MM-YYYY` dates and metadata validation/preservation need implementation. |
-| Unattended/stale selection (D-12) | Approved; read-only non-TTY listing, complete selection validation and snapshot guards need implementation. |
+| TODO metadata (D-11) | Proposal dates use `DD-MM-YYYY`; structured metadata validation/presentation remains pending. |
+| Unattended/stale selection (D-12) | Read-only non-TTY listing, selection validation and snapshot guards implemented. |
 
 The authoritative specification records the exact targets, acceptance examples and remaining gaps.
 
@@ -71,7 +71,7 @@ python diary_agent.py --model mistral capture
 
 No subcommand defaults to capture. Dates accept `dd_mm_yyyy` or relative day integers such as `-1`, `+1`, and `0`. Editor keys are `Ctrl+D` to submit, `Alt+R` to request a rewrite and `Alt+S` to request tag suggestions. Available LLM actions depend on model configuration. Successful interactive capture offers section tagging; capture never opens TODO review.
 
-D-01's approved target requires exact final-body preservation and explicit consent to a complete changed LLM proposal. The current implementation does not yet satisfy that target, including in `--text` processing; see the status table and specification before relying on literal preservation.
+Final submitted bodies are saved verbatim. `Alt+R` displays a locked proposal; `Alt+Y` accepts and `Alt+N` restores the original draft. `Ctrl+D` submits after review. TTY `--text` proposals ask for consent; unattended capture keeps the original text.
 
 Files use dates such as `25_03_2026.md`. Captures have time headings; repeated captures in one minute use serial suffixes:
 
@@ -96,21 +96,21 @@ python diary_agent.py show -1
 python diary_agent.py show 25_03_2026
 ```
 
-`todos` reviews pending checkboxes across immediate diary Markdown files. D-11's approved metadata target uses `[due: 16-11-2026] [priority: high]` for new generated values, preserving existing valid hyphen/ISO/underscore dates and unknown/invalid metadata as unvalidated text. Relative dates may be expanded only for open tasks within an accepted LLM proposal; completed dates stay unchanged. These metadata changes still need implementation. Diary filenames and explicit day arguments remain `dd_mm_yyyy`. A missing model does not prevent checkbox discovery/completion, but HTFS remains mandatory.
+`todos` reviews pending checkboxes across immediate diary Markdown files. D-11's approved metadata target uses `[due: 16-11-2026] [priority: high]` for new generated values, preserving existing valid hyphen/ISO/underscore dates and unknown/invalid metadata as unvalidated text. Relative dates may be expanded only for open tasks within an accepted LLM proposal; completed dates stay unchanged. Proposal expansion is implemented; structured validation and presentation of unvalidated fields remain pending. Diary filenames and explicit day arguments remain `dd_mm_yyyy`. A missing model does not prevent checkbox discovery/completion, but HTFS remains mandatory.
 
-D-12's pending target lists tasks without prompts or task changes when stdin is noninteractive. Interactive malformed/out-of-range input changes no tasks; completion must verify affected files/tasks still match the displayed snapshot and require refresh/reselection if stale. The current implementation does not yet provide these guarantees.
+With noninteractive stdin, `todos` lists tasks without prompts or changes. Malformed/out-of-range interactive selections are rejected as a whole. Completion checks affected-file snapshots before writing and requires reselection after changes; this does not make multiple writes atomic.
 
 `show` defaults to today and can offer the latest entry when today is missing. With the terminal UI, it supports scrolling and these explicit actions:
 
 | Key | Action |
 | --- | --- |
-| `[` / `]` | Previous/next existing entry. Calendar ordering is an approved pending fix. |
-| `g` | Entry picker. Newest-first calendar sorting is a pending fix. |
+| `[` / `]` | Previous/next existing dated entry in calendar order. |
+| `g` | Entry picker, newest date first. |
 | `Space` | Toggle the checkbox at the cursor. |
 | `e` / `t` / `d` | Edit, manage tags, or confirm deletion of the section at the cursor. |
 | `q` / `Esc` / `Ctrl+C` | Exit. |
 
-Without prompt_toolkit, viewing prints to stdout. Direct typing does not edit the viewer. Consult pending D-05/D-06/D-08/D-09 targets before treating section mutations, recovery or tag cancellation as fully conformant.
+Without prompt_toolkit, viewing prints to stdout. Direct typing does not edit the viewer. Duplicate IDs block section mutations; edits preserve bytes outside their target. Cancellation preserves tags and an accepted empty selection clears them. Cross-store recovery remains pending under D-08.
 
 ## Tags and search
 
@@ -134,16 +134,21 @@ Search retrieves local excerpts and tags. A configured model may synthesize an a
 ## Development and verification
 
 ```text
-diary_agent.py                 CLI, orchestration and current domain/storage logic
+diary_agent.py                 Stable entrypoint
 diary_agent_app/
+  cli.py                       Arguments, startup and dispatch
+  commands.py                  User workflows and output
+  service.py                   Diary operations without terminal UI
+  markdown.py                  Source spans and localized section mutation
   models.py                    Shared records
   core.py                      Config, parsing, TODO and retrieval helpers
-  llm.py                       Five Ollama-backed operations
-  htfs_adapter.py              Bundled HTFS boundary
-  ui.py                        Terminal UI
-deps/HTFS/                     Pinned Git submodule
-tests/test_diary_agent.py       Application and backend integration tests
-scripts/specification/         Independent finite consistency checker
+  llm.py                       Five tasks, shared Ollama transport
+  htfs_adapter.py              Bundled HTFS boundary and session lifecycle
+  ui.py                        Editor, proposal review and dialogs
+  viewer.py                    Viewer/picker and explicit actions
+deps/HTFS/                    Pinned Git submodule
+tests/                        Regression and contract acceptance tests
+scripts/specification/        Independent finite consistency checker
 ```
 
 ```bash
@@ -153,5 +158,7 @@ python3 scripts/specification/check_consistency.py --output docs/specification/e
 ```
 
 The consistency command uses the mathematical-abstractions checkout documented in [MathematicalModel.md](docs/specification/MathematicalModel.md); another location can be supplied with `--catalog-root`. Its [review](docs/specification/ConsistencyReview.md) and evidence are scoped finite analyses, separate from application-conformance and real terminal/model checks.
+
+See [Refactoring.md](docs/Refactoring.md) for the abstraction discovery and [Testing.md](docs/Testing.md) for the test audit and mathematical mappings.
 
 The stable entrypoint remains `diary_agent.py`. Follow [AGENTS.md](AGENTS.md), update contracts before implementation, and keep approved targets and implemented behavior visibly separate.

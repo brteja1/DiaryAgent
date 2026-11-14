@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import contextmanager
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -29,12 +30,9 @@ class HTFSAdapter:
     def ensure_initialized(self) -> None:
         if self.is_initialized():
             return
-        client = self._client()
-        try:
+        with self._session() as client:
             client.initialize()
             client.add_tags(["People", "Place", "Topic", "Project", "Area"])
-        finally:
-            client.close()
 
     def resource_path_for_section(self, section: DiarySection) -> str:
         return f"{section.file_path.resolve()}#{section.heading}"
@@ -49,7 +47,9 @@ class HTFSAdapter:
             return None
         return f"{file_name}#{heading}"
 
-    def load_section_by_resource_path(self, agent, resource_path: str) -> DiarySection | None:
+    def load_section_by_resource_path(
+        self, agent, resource_path: str
+    ) -> DiarySection | None:
         section_id = self.section_id_from_resource_path(resource_path)
         if section_id is None:
             return None
@@ -68,7 +68,9 @@ class HTFSAdapter:
 
         def require_bundled(module):
             source = getattr(module, "__file__", None)
-            if source is None or not Path(source).resolve().is_relative_to(package_path):
+            if source is None or not Path(source).resolve().is_relative_to(
+                package_path
+            ):
                 raise RuntimeError(
                     "A different HTFS package is already loaded. Restart using the Diary Agent "
                     f"environment with the bundled backend at {backend_path}."
@@ -95,42 +97,38 @@ class HTFSAdapter:
     def _client(self):
         return self.require_backend()(str(self.boundary))
 
-    def add_tags(self, tags: Iterable[str]) -> list[str]:
+    @contextmanager
+    def _session(self):
+        """Every backend operation flushes/closes its client, including on errors."""
         client = self._client()
         try:
-            return client.add_tags(list(tags))
+            yield client
         finally:
             client.close()
+
+    def add_tags(self, tags: Iterable[str]) -> list[str]:
+        with self._session() as client:
+            return client.add_tags(list(tags))
 
     def list_tags(self) -> list[str]:
-        client = self._client()
-        try:
+        with self._session() as client:
             return list(client.get_tags_list([]))
-        finally:
-            client.close()
 
     def get_top_level_tags(self) -> list[str]:
-        client = self._client()
-        try:
+        with self._session() as client:
             all_tags = list(client.get_tags_list([]))
             top_level = []
             for tag in all_tags:
                 if not client.th.get_parent_tags(tag):
                     top_level.append(tag)
             return sorted(top_level)
-        finally:
-            client.close()
 
     def get_child_tags(self, tag_name: str) -> list[str]:
-        client = self._client()
-        try:
+        with self._session() as client:
             return sorted(list(client.th.get_child_tags(tag_name)))
-        finally:
-            client.close()
 
     def get_tag_descendants(self, tag_name: str) -> list[str]:
-        client = self._client()
-        try:
+        with self._session() as client:
             seen: set[str] = set()
             descendants: list[str] = []
 
@@ -144,27 +142,18 @@ class HTFSAdapter:
 
             walk(tag_name)
             return descendants
-        finally:
-            client.close()
 
     def tag_has_usage(self, tag_name: str) -> bool:
-        client = self._client()
-        try:
+        with self._session() as client:
             return bool(client.get_resources_by_tag([tag_name]))
-        finally:
-            client.close()
 
     def delete_tag(self, tag_name: str) -> bool:
-        client = self._client()
-        try:
+        with self._session() as client:
             return bool(client.del_tag(tag_name))
-        finally:
-            client.close()
 
     def get_all_tag_paths(self) -> list[str]:
         """Get all possible hierarchical tag paths."""
-        client = self._client()
-        try:
+        with self._session() as client:
             all_tags = list(client.get_tags_list([]))
             paths = []
 
@@ -179,60 +168,35 @@ class HTFSAdapter:
             for tag in top_level:
                 build_paths(tag, [])
             return sorted(paths)
-        finally:
-            client.close()
 
     def tag_section(self, section: DiarySection, tags: Iterable[str]) -> list[str]:
-        client = self._client()
-        try:
+        with self._session() as client:
             resource_path = self.resource_path_for_section(section)
             client.add_resource(resource_path)
             return client.tag_resource(resource_path, list(tags))
-        finally:
-            client.close()
 
     def section_tags(self, section: DiarySection) -> list[str]:
-        client = self._client()
-        try:
-            return list(client.get_resource_tags(self.resource_path_for_section(section)))
-        finally:
-            client.close()
+        with self._session() as client:
+            return list(
+                client.get_resource_tags(self.resource_path_for_section(section))
+            )
 
     def clear_section_tags(self, section: DiarySection) -> None:
-        client = self._client()
-        try:
+        with self._session() as client:
             resource_path = self.resource_path_for_section(section)
             current_tags = client.get_resource_tags(resource_path)
             if current_tags:
                 client.untag_resource(resource_path, list(current_tags))
-        finally:
-            client.close()
 
     def delete_section_resource(self, section: DiarySection) -> None:
-        client = self._client()
-        try:
+        with self._session() as client:
             resource_path = self.resource_path_for_section(section)
             current_tags = client.get_resource_tags(resource_path)
             if current_tags:
                 client.untag_resource(resource_path, list(current_tags))
 
-            # Prefer full resource deletion when supported by the installed HTFS API.
-            for method_name in ("del_resource", "delete_resource", "remove_resource"):
-                method = getattr(client, method_name, None)
-                if method is None:
-                    continue
-                try:
-                    method(resource_path)
-                except Exception:
-                    # Treat missing resource as already deleted.
-                    pass
-                break
-        finally:
-            client.close()
+            client.del_resource(resource_path)
 
     def query_resource_paths(self, tag_expression: str) -> list[str]:
-        client = self._client()
-        try:
+        with self._session() as client:
             return list(client.get_resources_by_tag_expr(tag_expression))
-        finally:
-            client.close()

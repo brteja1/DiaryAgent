@@ -8,26 +8,26 @@ Subject to direct user instructions, [docs/Specification.md](docs/Specification.
 
 ## Current work status
 
-D-01 through D-12 are decided in specification v1.0. D-07's mandatory bundled HTFS integration is implemented and tested. D-01, D-04–06, D-08–09 and D-11–12 have implementation gaps recorded in the specification/design. Passing regressions do not establish full conformance.
+D-01 through D-12 are decided in specification v1.0. D-07's mandatory bundled HTFS integration is implemented and tested. Save/consent, calendar navigation, identity guards, byte preservation, tag-selection outcomes and TODO selection guards now have acceptance coverage. D-08 recovery and D-11 structured metadata validation/presentation remain pending. Passing regressions do not establish full conformance.
 
 Follow the decided contract when fixing an affected workflow, rather than treating a known contradiction as a requirement. Keep changes reviewable and identify the pending target they address.
 
 ## Module boundaries
 
-- `diary_agent.py`: CLI routing, orchestration and the current domain/storage object.
+- `diary_agent.py`: stable entrypoint. `cli.py` owns parsing/startup, `commands.py` workflows, `service.py` domain/storage, and `markdown.py` exact section spans.
 - `diary_agent_app/core.py`: config/parsing I/O, date/TODO helpers, retrieval and shortlisting.
 - `diary_agent_app/models.py`: shared records.
 - `diary_agent_app/llm.py`: calls/prompts for LLM-01's five tasks.
 - `diary_agent_app/htfs_adapter.py`: the only HTFS integration boundary.
-- `diary_agent_app/ui.py`: editor, dialogs, viewer, picker and completion.
-- `tests/test_diary_agent.py`: regressions and backend integration.
+- `diary_agent_app/ui.py`: editor, proposal review, dialogs and completion. `viewer.py` owns the viewer/picker.
+- `tests/test_diary_agent.py`: regressions and backend integration; `tests/test_contracts.py` holds requirement-based acceptance properties.
 
 ## Editing workflow
 
 - Prefer the smallest change satisfying the applicable clauses. Avoid abstractions unless they reduce real complexity.
 - Preserve module boundaries, readable Markdown and the stable CLI entrypoint. Identity/storage migrations require an explicit contract change.
 - Keep strict date validation under DATA-04; do not accept unrelated formats silently.
-- Read CAP-04/06/10–13 before capture changes: D-01 consent/verbatim behavior is not implemented everywhere.
+- Read CAP-04/06/10–13 before capture changes: keep proposal review separate from final verbatim persistence.
 - Read DATA-07–09 and VIEW-08–09 before section changes: unique targets and unrelated-byte preservation are decided obligations.
 - Read PERSIST-01–05 and TAG-07 before tag replacement/deletion/cancellation changes. Never conflate cancelled and accepted-empty.
 - Follow TODO-02/08 for D-11: generated TODO dates use `DD-MM-YYYY`, while existing values and verbatim text are preserved. This does not change diary filename/day-input syntax. Date expansion requires an accepted LLM proposal for an open task; generated priorities are low/medium/high and invalid legacy metadata stays unvalidated.
@@ -55,11 +55,11 @@ Use its Python API through the adapter, following DEP-01–02 and [docs/HTFS.md]
 
 ## Verification and documentation
 
-Update `tests/test_diary_agent.py` when behavior changes. Use focused assertions for outcomes and preserved data in capture, navigation, TODOs, storage and backend failures. Run at least:
+Update focused behavior tests when behavior changes; see [docs/Testing.md](docs/Testing.md) for coverage and selected mathematical properties. Use focused assertions for outcomes and preserved data in capture, navigation, TODOs, storage and backend failures. Run at least:
 
 ```bash
 python -m py_compile diary_agent.py diary_agent_app/core.py diary_agent_app/llm.py diary_agent_app/ui.py
-pytest -q tests/test_diary_agent.py
+pytest -q tests/test_diary_agent.py tests/test_contracts.py
 ```
 
 For changed contracts/encodings, update model/review and regenerate evidence:

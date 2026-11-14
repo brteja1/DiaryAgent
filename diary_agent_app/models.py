@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -11,6 +11,7 @@ class PendingTask:
     text: str
     due: str | None = None
     priority: str | None = None
+    source_snapshot: str | None = field(default=None, repr=False, compare=False)
 
     @property
     def key(self) -> str:

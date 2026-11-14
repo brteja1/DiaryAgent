@@ -28,19 +28,19 @@ The specification distinguishes baseline behavior and approved targets. All twel
 
 | Decision | Status at this documentation update |
 | --- | --- |
-| D-01: consent/verbatim saves | Approved; automatic processing and immediate rewrite application need changes. |
+| D-01: consent/verbatim saves | Save/consent paths implemented; tests cover original/proposal selection and exact persistence. |
 | D-02: review only through `todos` | Approved; capture routing agrees. |
 | D-03: five LLM tasks | Approved; existing operations retained and documentation aligned. |
-| D-04: calendar navigation | Approved; lexical navigation/picker need correction. |
-| D-05: identity/duplicate guards | Approved; duplicate-aware guards need implementation. |
-| D-06: targeted byte preservation | Approved; whole-file reconstruction needs replacement. |
+| D-04: calendar navigation | Implemented using parsed dates, including month/year boundaries. |
+| D-05: identity/duplicate guards | Unique/missing/ambiguous lookup and mutation guards implemented. |
+| D-06: targeted byte preservation | Implemented using exact source spans and byte-preservation tests. |
 | D-07: bundled mandatory HTFS | Implemented and integration-tested; setup is in [HTFS.md](HTFS.md). |
 | D-08: persistence/recovery | Approved; records, receipts and retry actions need implementation. |
-| D-09: cancellation/accepted-empty | Approved; current UI/caller outcomes need repair. |
+| D-09: cancellation/accepted-empty | Cancel/clear/replace distinguished and tested; failure recovery remains D-08. |
 | D-10: document authority | Applied in documentation; no application behavior changed. |
-| D-11: TODO metadata interpretation | Approved; consent-only open-task expansion, `DD-MM-YYYY` generation and structured validation/preservation need implementation. |
-| D-12: unattended/stale TODO selection | Approved; TTY routing, whole-selection validation and source/task snapshot guards need implementation. |
+| D-11: TODO metadata interpretation | Open-task proposal expansion uses `DD-MM-YYYY`; structured metadata validation/presentation remains pending. |
+| D-12: unattended/stale TODO selection | Selection guards and read-only unattended listing implemented; cross-file write-failure recovery remains D-08. |
 
 ## Verification
 
-Use the commands and acceptance plan in [Specification.md](Specification.md). Keep this index aligned as decisions and implementations change. Mathematical models, application tests and live integration checks are separate evidence. [Future.md](Future.md) is a proposal archive, not additional requirements.
+See [Testing.md](Testing.md) for behavior coverage and the test audit. Use the commands and acceptance plan in [Specification.md](Specification.md). Keep this index aligned as decisions and implementations change. Mathematical models, application tests and live integration checks are separate evidence. [Future.md](Future.md) is a proposal archive, not additional requirements.

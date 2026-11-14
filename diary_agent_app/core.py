@@ -89,7 +89,7 @@ def expand_todo_date_references(text: str, base_date: dt.date) -> str:
             weekday_index = WEEKDAY_NAME_TO_INDEX[weekday_name]
             days_ahead = (weekday_index - base_date.weekday()) % 7
             target_date = base_date + dt.timedelta(days=days_ahead)
-        return target_date.strftime(DATE_FMT)
+        return f"{target_date.day:02d}-{target_date.month:02d}-{target_date.year:04d}"
 
     return TODO_DATE_REFERENCE_RE.sub(replace, text)
 
@@ -111,6 +111,15 @@ def render_todo_line(
     priority: str | None = None,
 ) -> str:
     return f"{indent}- [{state}] {text.strip()}{render_todo_details(due, priority)}"
+
+
+def todo_with_state(line: str, state: str) -> str:
+    """Change only the checkbox character, retaining source text and endings."""
+    match = TODO_RE.match(line)
+    if match is None:
+        raise RuntimeError("The selected line is no longer a TODO.")
+    start, end = match.span("state")
+    return line[:start] + state + line[end:]
 
 
 def config_file_path(home: Path | None = None) -> Path:
@@ -159,7 +168,9 @@ def prompt_for_config_entries(config_path: Path, stdin=None) -> AppConfig:
         )
 
     print(f"Config file required: {config_path}")
-    print("Populate the diary storage location to continue. HTFS is bundled with the app.")
+    print(
+        "Populate the diary storage location to continue. HTFS is bundled with the app."
+    )
     print("Ollama model is optional.")
     while True:
         diary_answer = input("Diary folder path: ").strip()
@@ -204,7 +215,12 @@ def shortlist_similar_tasks(
         task_key = normalize_todo_text(task.text)
         task_words = set(task_key.split())
         overlap = len(candidate_words & task_words)
-        substring_bonus = 3 if candidate_key and (candidate_key in task_key or task_key in candidate_key) else 0
+        substring_bonus = (
+            3
+            if candidate_key
+            and (candidate_key in task_key or task_key in candidate_key)
+            else 0
+        )
         score = overlap + substring_bonus
         if score > 0:
             scored.append((score, task))
@@ -227,4 +243,125 @@ def overlap_count(text: str, tokens: Sequence[str]) -> int:
 
 def score_text(text: str, tokens: Sequence[str]) -> int:
     lowered = text.lower()
-    return sum(3 if token in lowered else 0 for token in tokens) + overlap_count(text, tokens)
+    return sum(3 if token in lowered else 0 for token in tokens) + overlap_count(
+        text, tokens
+    )
+
+
+def todo_reference_date(
+    day_text: str | None = None, file_path: Path | None = None
+) -> dt.date:
+    if file_path is not None:
+        try:
+            return dt.datetime.strptime(file_path.stem, DATE_FMT).date()
+        except ValueError:
+            pass
+    if day_text is not None:
+        normalized = parse_explicit_day_input(day_text)
+        return dt.datetime.strptime(normalized, DATE_FMT).date()
+    return dt.date.today()
+
+
+def normalize_todo_dates(entry: str, base_date: dt.date) -> str:
+    normalized_lines: list[str] = []
+    for line in entry.splitlines():
+        match = TODO_RE.match(line)
+        if not match or match.group("state") != " ":
+            normalized_lines.append(line)
+            continue
+
+        todo_text, due, priority = parse_todo_details(match.group("text").strip())
+        todo_text = expand_todo_date_references(todo_text, base_date)
+        if due is not None:
+            due = expand_todo_date_references(due, base_date)
+        normalized_lines.append(
+            render_todo_line(
+                match.group("indent"),
+                match.group("state"),
+                todo_text,
+                due=due,
+                priority=priority,
+            )
+        )
+    return "\n".join(normalized_lines)
+
+
+def lines_are_redundant(first: str, second: str) -> bool:
+    first_key = normalize_todo_text(first)
+    second_key = normalize_todo_text(second)
+    if not first_key or not second_key:
+        return False
+    if first_key == second_key:
+        return True
+
+    first_tokens = first_key.split()
+    second_tokens = second_key.split()
+    if min(len(first_tokens), len(second_tokens)) < 4:
+        return False
+
+    first_words = set(first_tokens)
+    second_words = set(second_tokens)
+    overlap = len(first_words & second_words)
+    shorter = min(len(first_words), len(second_words))
+    if shorter == 0:
+        return False
+
+    overlap_ratio = overlap / shorter
+    return first_key in second_key or second_key in first_key or overlap_ratio >= 0.8
+
+
+def parse_explicit_day_input(day_text: str) -> str:
+    normalized = day_text.strip()
+
+    # Try parsing as a relative date (e.g., -1, +2, 0)
+    if re.fullmatch(r"[-+]?\d+", normalized):
+        try:
+            days_offset = int(normalized)
+            target_date = dt.date.today() + dt.timedelta(days=days_offset)
+            return target_date.strftime(DATE_FMT)
+        except (ValueError, OverflowError):
+            pass
+
+    if not re.fullmatch(r"\d{2}_\d{2}_\d{4}", normalized):
+        raise RuntimeError(
+            "Invalid day format. Use dd_mm_yyyy, or relative days like -1, +1, 0."
+        )
+    try:
+        dt.datetime.strptime(normalized, DATE_FMT)
+    except ValueError as exc:
+        raise RuntimeError(
+            "Invalid calendar date. Use a valid dd_mm_yyyy day."
+        ) from exc
+    return normalized
+
+
+def date_for_diary_file(path: Path) -> dt.date | None:
+    if re.fullmatch(r"[0-9]{2}_[0-9]{2}_[0-9]{4}", path.stem) is None:
+        return None
+    try:
+        return dt.datetime.strptime(path.stem, DATE_FMT).date()
+    except ValueError:
+        return None
+
+
+def format_entry_title(day_text: str) -> str:
+    try:
+        parsed = dt.datetime.strptime(day_text, DATE_FMT)
+    except ValueError:
+        return day_text
+    return parsed.strftime("%d %b %Y")
+
+
+def build_entry_search_text(day_text: str, title: str) -> str:
+    variants = [
+        day_text.lower(),
+        day_text.replace("_", "").lower(),
+        day_text.replace("_", " ").lower(),
+        " ".join(reversed(day_text.split("_"))).lower(),
+        title.lower(),
+    ]
+    return " ".join(dict.fromkeys(variants))
+
+
+def resource_tags_for_specs(tags: Sequence[str]) -> list[str]:
+    return [tag.rsplit("/", 1)[-1].strip() for tag in tags if tag.strip()]
