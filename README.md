@@ -1,52 +1,46 @@
 # Diary Agent
 
-`Diary Agent` is a local terminal-based diary assistant for capturing daily notes, tracking TODOs, and searching diary history with a local Ollama model.
+A local-first Python terminal diary with daily Markdown notes, persistent TODOs, section tags and local Ollama-assisted search. HTFS is a mandatory bundled dependency; LLM assistance is optional.
 
-It stores notes as Markdown files, one file per day, and is designed to run offline on your machine once dependencies and the model are installed.
+[Specification](docs/Specification.md) is the authoritative behavior contract. [Requirements](docs/Requirements.md) indexes its features and implementation status. [Design](docs/Design.md) describes architecture; [AGENTS.md](AGENTS.md) provides contributor guidance. [Future](docs/Future.md) contains nonbinding proposals.
 
-## Features
+## Implementation status
 
-- Capture informal updates and convert them into concise Markdown bullets.
-- Preserve nested bullet hierarchy when a single update naturally expands into sub-points.
-- Store daily notes in `dd_mm_yyyy.md` files.
-- Detect and manage open TODO items using Markdown checkboxes.
-- Avoid duplicate or near-duplicate TODOs.
-- Search past diary entries and ask questions against your diary history.
-- Use a local Ollama model instead of a cloud LLM.
-- Support both interactive terminal UI and non-interactive CLI usage.
+The specification includes approved targets that are not yet implemented. Current regression success is not a claim of full conformance.
 
-## Project Structure
+| Area | Current status |
+| --- | --- |
+| Mandatory bundled HTFS (D-07) | Implemented, including startup validation and integration tests. |
+| TODO review (D-02) and five LLM tasks (D-03) | Current routing/task inventory agrees with the decisions. |
+| Consent and verbatim saves (D-01) | Pending: code still applies rewrite output directly and normalizes/trims/filters content in save paths. |
+| Calendar navigation, identity guards and byte preservation (D-04–06) | Pending: lexical ordering, first-match lookup and whole-file reconstruction require correction. |
+| Recovery and tag cancellation (D-08–09) | Pending: no recovery journal/retry mechanism; cancellation and accepted-empty still need distinct UI results. |
+| Documentation authority (D-10) | Applied in the documentation. |
+| TODO metadata (D-11) | Approved; generated `DD-MM-YYYY` dates and metadata validation/preservation need implementation. |
+| Unattended/stale selection (D-12) | Approved; read-only non-TTY listing, complete selection validation and snapshot guards need implementation. |
 
-The code is now split by responsibility:
+The authoritative specification records the exact targets, acceptance examples and remaining gaps.
 
-```text
-diary_agent.py              CLI entrypoint and app orchestration
-diary_agent_app/
-  __init__.py
-  models.py                 Shared data models
-  core.py                   Core diary, config, search, and TODO logic
-  llm.py                    Ollama integration
-  ui.py                     prompt_toolkit UI helpers
-tests/
-  test_diary_agent.py
-```
+All twelve recorded decisions are resolved in specification v1.0; the pending rows above describe implementation work, not unanswered product choices.
 
-## Requirements
+## Setup
 
-- Python 3.10+
-- [Ollama](https://ollama.com/) installed and running locally
-- A model already pulled into Ollama
-- Python dependencies from `requirements.txt`
+Requires Python 3.10+, Git, the pinned HTFS source, and Python packages from `requirements.txt`. Ollama and a pulled model are needed only for LLM-backed operations. Terminal presentation uses `prompt_toolkit` with CLI fallbacks where available.
 
-## Installation
-
-Install Python dependencies:
+From the repository root:
 
 ```bash
-pip install -r requirements.txt
+git submodule update --init --recursive
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
-Make sure Ollama is installed and running, then pull a model you want to use, for example:
+For a new clone, use `git clone --recurse-submodules <DiaryAgent-repository-url>`. `make deps` initializes submodules and installs dependencies in the selected Python environment.
+
+[HTFS setup](docs/HTFS.md) documents the initial pin and checks. The app uses the Python API from `deps/HTFS`, never a discovered `tagfs` command or external checkout. Every operational CLI command requires HTFS and checks the diary boundary before dispatch. Help is available without backend initialization.
+
+To use a local model, install/start Ollama and pull the model you choose, for example:
 
 ```bash
 ollama pull llama3
@@ -54,262 +48,110 @@ ollama pull llama3
 
 ## Configuration
 
-The app uses a config file at:
-
-```text
-~/.config/diary_agent/config.txt
-```
-
-Required entries:
-
-```text
-diary_path=/path/to/your/diary
-htfs_path=/path/to/HTFS
-```
-
-Example:
+`~/.config/diary_agent/config.txt`:
 
 ```text
 diary_path=~/Diary
-htfs_path=~/HTFS
+# Optional:
+llm_model=llama3
 ```
 
-Notes:
+`diary_path` is required; omit `llm_model` for no-LLM operation. An interactive run can create missing/incomplete config; unattended startup reports an error. The CLI override `--model MODEL` appears before the subcommand.
 
-- `diary_path` is where daily Markdown files are stored.
-- `llm_model` is optional. When omitted, LLM-backed rewrite, tag suggestion, TODO similarity, and answer synthesis stay disabled.
-- If `llm_model` is present, it must match a model available in your local Ollama instance.
-- `htfs_path` must point to the local HTFS checkout that provides the Python package.
-- If the config file is missing during an interactive run, the app will prompt you and create it.
-- In non-interactive mode, missing or invalid config causes the app to exit with an error.
+HTFS always comes from `deps/HTFS`. Old `htfs_path` entries and `DIARY_AGENT_HTFS_PATH` values are ignored. Metadata files `.tagfs.db` and `.tagfs.ttl` live in the diary directory, outside the submodule.
 
-## Usage
-
-Run capture mode:
+## Capture
 
 ```bash
 python diary_agent.py
-```
-
-This defaults to `capture` mode.
-
-### Capture Notes Interactively
-
-```bash
-python diary_agent.py capture
-python diary_agent.py capture --day "25_03_2026"
-```
-
-Behavior:
-
-- Opens a multiline terminal editor.
-- `Ctrl+D` submits the current note.
-- `Alt+R` rewrites the current buffer with Ollama on demand.
-- While a rewrite is running, the editor status shows that it is waiting for the LLM rewrite.
-- The rewritten text is applied back into the same editor buffer, where you can keep editing before saving.
-- Whatever is in the editor when you press `Ctrl+D` is written to the diary verbatim under the timestamp heading.
-- `--day dd_mm_yyyy` writes the capture to that day's file instead of today. You can also use relative dates like `-1` (yesterday), `+1` (tomorrow), or `0` (today).
-- After a successful interactive save, the app immediately prompts for tags for the newly written timestamp section.
-- The tag prompt shows the existing HTFS tags and also accepts new comma-separated tags.
-- Nested bullets are preserved when useful, but the rewrite does not introduce new Markdown sections.
-
-TODO review is handled separately through:
-
-```bash
-python diary_agent.py todos
-```
-
-### Capture Notes Non-Interactively
-
-```bash
-python diary_agent.py capture --text "Had a productive day, need to follow up with finance tomorrow"
-python diary_agent.py capture --day "25_03_2026" --text "Backfilled a note for that day"
-```
-
-This is useful for scripts, aliases, or quick terminal logging.
-
-### Search Diary History
-
-```bash
-python diary_agent.py search "What did I note about the login bug?"
-python diary_agent.py search --tags "project diary agent" "login bug"
-python diary_agent.py search --tags "Project&Topic/Retrieval"
-```
-
-Behavior:
-
-- The app retrieves relevant excerpts from diary files and matches against section tags.
-- Matching excerpts include HTFS section tags when available.
-- `--tags` optionally narrows the search to matching HTFS sections.
-- With a configured model, `--tags` can be a natural-language description that is translated into an HTFS tag expression using the current tag inventory.
-- Without a configured model, `--tags` must already be a valid HTFS tag expression using `&`, `|`, `~`, and parentheses.
-- Ollama answers using only those excerpts.
-- Matching excerpts are printed after the answer.
-- If the configured model is unavailable, the app warns and falls back to basic text search results with section tags.
-
-### Show A Day
-
-```bash
-python diary_agent.py show
-python diary_agent.py show "05_03_2026"
-python diary_agent.py show "-1"
-```
-
-Behavior:
-
-- With no argument, `show` opens today's diary entry.
-- If today's entry is missing, `show` offers to open the most recent available entry instead.
-- If a day is provided, it must use `dd_mm_yyyy` format.
-- Any other format is rejected with an error.
-- The matching diary entry is shown exactly as stored.
-- If `prompt_toolkit` is available, the entry opens in a scrollable terminal viewer.
-- The viewer supports arrow keys and page navigation, `[` for the previous entry, `]` for the next entry, `g` to fuzzy-pick another existing entry, `e` to edit the current timestamp section, `t` to manage tags for that section, `d` to delete the current timestamp section (with confirmation), and exits with `q`, `Esc`, or `Ctrl+C`.
-- Deleting a timestamp section from the show viewer also removes the corresponding HTFS section resource and its tags.
-- If `prompt_toolkit` is unavailable, the stored entry is printed to stdout.
-
-### Show A Specific Day
-
-```bash
-python diary_agent.py show "05_03_2026"
-python diary_agent.py show "-1"
-```
-
-### Section Tags
-
-Diary sections are identified by day plus the time heading inside that day file.
-
-Examples:
-
-```bash
-python diary_agent.py tags show 26_03_2026 14:30
-python diary_agent.py tags apply 26_03_2026 14:30 Project/DiaryAgent Topic/Retrieval
-python diary_agent.py tags suggest 26_03_2026 14:30
-python diary_agent.py tags ls
-python diary_agent.py tags tree Project
-python diary_agent.py tags delete Project --descendants --unused-only --yes
-```
-
-Behavior:
-
-- `tags show` prints the HTFS tags currently attached to one timestamp section.
-- `tags apply` ensures the given tags exist in HTFS and applies them to that section.
-- `tags suggest` uses the configured model to suggest tags from the existing HTFS tag set.
-- `tags ls` prints the flat HTFS tag inventory.
-- `tags tree` prints the HTFS hierarchy and can be rooted at a specific tag.
-- `tags delete` removes a tag from the whole HTFS taxonomy.
-- `tags delete` can recursively include descendants and can be restricted to unused tags only.
-- `tags delete` asks for confirmation unless `--yes` is provided.
-- Section ids are derived internally in the form `dd_mm_yyyy.md#HH:MM`.
-- If multiple updates are captured in the same minute, later sections use `dd_mm_yyyy.md#HH:MM:<serial>` (for example `dd_mm_yyyy.md#14:30:2`).
-- The configured diary path is the HTFS boundary.
-- If HTFS metadata has not been initialized there yet, Diary Agent initializes it automatically on first tag use.
-- Hierarchical tags are passed to HTFS exactly as entered.
-- If you enter a tag like `T1/T2/T3`, HTFS is responsible for creating and linking `T1`, `T2`, and `T3`.
-- To conform to HTFS resource-tagging rules, Diary Agent assigns the section resource to the leaf tag name only, for example `T3`.
-
-### Override Configured Model
-
-```bash
+python diary_agent.py capture --day 25_03_2026
+python diary_agent.py capture --day -1 --text "Backfilled a note"
 python diary_agent.py --model mistral capture
 ```
 
-This only overrides the configured model for the current command.
+No subcommand defaults to capture. Dates accept `dd_mm_yyyy` or relative day integers such as `-1`, `+1`, and `0`. Editor keys are `Ctrl+D` to submit, `Alt+R` to request a rewrite and `Alt+S` to request tag suggestions. Available LLM actions depend on model configuration. Successful interactive capture offers section tagging; capture never opens TODO review.
 
-## Diary Format
+D-01's approved target requires exact final-body preservation and explicit consent to a complete changed LLM proposal. The current implementation does not yet satisfy that target, including in `--text` processing; see the status table and specification before relying on literal preservation.
 
-Diary files are stored in the configured diary folder like this:
-
-```text
-24_03_2026.md
-25_03_2026.md
-26_03_2026.md
-```
-
-Generated notes are grouped under time-based Markdown headings:
+Files use dates such as `25_03_2026.md`. Captures have time headings; repeated captures in one minute use serial suffixes:
 
 ```markdown
 ## 14:30
 
-- Finished the payment reconciliation task.
-- [ ] Follow up with the design team about the dashboard mockups.
-```
-
-If more than one update lands in the same minute, headings are disambiguated with a serial suffix:
-
-```markdown
-## 14:30
-
-- First update in that minute.
+- Finished the review.
+- [ ] Follow up with finance
 
 ## 14:30:2
 
-- Second update in the same minute.
-```
-
-If a note naturally contains sub-points, nested bullets are retained:
-
-```markdown
-## 16:10
-
 - Project work
-  - Finished auth cleanup
-  - Added regression coverage
+  - Reviewed the retry logic.
 ```
 
-## TODO Behavior
-
-The app scans all `*.md` files in the diary directory for unchecked tasks in this format:
-
-```markdown
-- [ ] Example task
-```
-
-Optional deadline and priority metadata can be added on the same line:
-
-```markdown
-- [ ] Example task [due: 2026-05-01] [priority: high]
-```
-
-Current behavior:
-
-- Open tasks can be marked complete as `- [x] ...`.
-- Optional TODO metadata is preserved when tasks are toggled complete.
-- The TODO list shows optional deadline and priority metadata when present.
-- Relative date words in TODOs, such as `tomorrow` or weekday names, are expanded to exact dates when the update is saved.
-- Exact duplicate TODOs are removed automatically.
-- Similar TODOs are checked against existing open tasks.
-- In interactive mode, the app asks whether to keep a similar TODO.
-- In fully non-interactive mode, similar TODOs are skipped.
-
-## Error Handling
-
-Common failures:
-
-- Missing `ollama` Python package
-- Missing `prompt_toolkit` Python package
-- Ollama service not running
-- Configured model not available in Ollama
-- Missing config file in non-interactive mode
-
-The CLI prints clear runtime errors for these cases.
-
-## Running Tests
-
-Run the test suite with:
+## TODOs and viewing
 
 ```bash
-pytest -q
+python diary_agent.py todos
+python diary_agent.py show
+python diary_agent.py show -1
+python diary_agent.py show 25_03_2026
 ```
 
-## Typical Workflow
+`todos` reviews pending checkboxes across immediate diary Markdown files. D-11's approved metadata target uses `[due: 16-11-2026] [priority: high]` for new generated values, preserving existing valid hyphen/ISO/underscore dates and unknown/invalid metadata as unvalidated text. Relative dates may be expanded only for open tasks within an accepted LLM proposal; completed dates stay unchanged. These metadata changes still need implementation. Diary filenames and explicit day arguments remain `dd_mm_yyyy`. A missing model does not prevent checkbox discovery/completion, but HTFS remains mandatory.
 
-1. Configure the diary folder and local model.
-2. Run `python diary_agent.py capture` during the day to log updates.
-3. Let the app format notes and track TODOs.
-4. Run `python diary_agent.py search "..."` to query past entries.
+D-12's pending target lists tasks without prompts or task changes when stdin is noninteractive. Interactive malformed/out-of-range input changes no tasks; completion must verify affected files/tasks still match the displayed snapshot and require refresh/reselection if stale. The current implementation does not yet provide these guarantees.
 
-## Notes For Developers
+`show` defaults to today and can offer the latest entry when today is missing. With the terminal UI, it supports scrolling and these explicit actions:
 
-- `diary_agent.py` remains the stable entrypoint.
-- Internal implementation details are split into the `diary_agent_app` package.
-- Tests currently target the public API exposed by `diary_agent.py`.
+| Key | Action |
+| --- | --- |
+| `[` / `]` | Previous/next existing entry. Calendar ordering is an approved pending fix. |
+| `g` | Entry picker. Newest-first calendar sorting is a pending fix. |
+| `Space` | Toggle the checkbox at the cursor. |
+| `e` / `t` / `d` | Edit, manage tags, or confirm deletion of the section at the cursor. |
+| `q` / `Esc` / `Ctrl+C` | Exit. |
+
+Without prompt_toolkit, viewing prints to stdout. Direct typing does not edit the viewer. Consult pending D-05/D-06/D-08/D-09 targets before treating section mutations, recovery or tag cancellation as fully conformant.
+
+## Tags and search
+
+```bash
+python diary_agent.py tags show 25_03_2026
+python diary_agent.py tags show 25_03_2026 14:30
+python diary_agent.py tags apply 25_03_2026 14:30 Project/DiaryAgent Topic/Retrieval
+python diary_agent.py tags suggest 25_03_2026 14:30
+python diary_agent.py tags ls
+python diary_agent.py tags tree Project
+python diary_agent.py tags delete Project --descendants --unused-only --yes
+python diary_agent.py search "What did I note about retries?"
+python diary_agent.py search --tags 'DiaryAgent&Retrieval' "retries"
+python diary_agent.py search --tags DiaryAgent
+```
+
+Tagging is at timestamp-section level. HTFS owns hierarchical path creation; resources are associated with leaf tag names. `tags apply` adds associations; suggestions print without applying them. Taxonomy deletion is distinct from untagging a section and requires confirmation unless `--yes` supplies it. Serial-suffixed section times are supported.
+
+Search retrieves local excerpts and tags. A configured model may synthesize an answer or translate a natural-language tag filter. Without a model, use HTFS expressions (`&`, `|`, `~`, parentheses); a tag-only search lists matching sections. Answer-synthesis failures can fall back to local excerpts; HTFS failures do not permit a tag-free fallback, and filter failures never silently widen the search.
+
+## Development and verification
+
+```text
+diary_agent.py                 CLI, orchestration and current domain/storage logic
+diary_agent_app/
+  models.py                    Shared records
+  core.py                      Config, parsing, TODO and retrieval helpers
+  llm.py                       Five Ollama-backed operations
+  htfs_adapter.py              Bundled HTFS boundary
+  ui.py                        Terminal UI
+deps/HTFS/                     Pinned Git submodule
+tests/test_diary_agent.py       Application and backend integration tests
+scripts/specification/         Independent finite consistency checker
+```
+
+```bash
+python -m py_compile diary_agent.py diary_agent_app/core.py diary_agent_app/llm.py diary_agent_app/ui.py
+pytest -q
+python3 scripts/specification/check_consistency.py --output docs/specification/evidence.json
+```
+
+The consistency command uses the mathematical-abstractions checkout documented in [MathematicalModel.md](docs/specification/MathematicalModel.md); another location can be supplied with `--catalog-root`. Its [review](docs/specification/ConsistencyReview.md) and evidence are scoped finite analyses, separate from application-conformance and real terminal/model checks.
+
+The stable entrypoint remains `diary_agent.py`. Follow [AGENTS.md](AGENTS.md), update contracts before implementation, and keep approved targets and implemented behavior visibly separate.

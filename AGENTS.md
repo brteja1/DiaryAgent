@@ -1,149 +1,71 @@
 # AGENTS
 
-## Purpose
+## Purpose and authority
 
-This file gives coding agents project-specific guidance for working in this repository.
-It should be treated as the operational companion to `README.md`, `docs/Requirements.md`, and `docs/Design.md`.
+Operational guidance for coding agents in this repository. Diary Agent is a local-first Python CLI for Markdown capture, persistent TODOs, day viewing/tagging and local-model-assisted search.
 
-## Project Summary
+Subject to direct user instructions, [docs/Specification.md](docs/Specification.md) is the authoritative behavior contract (D-10). Read its applicable IDs and decision/implementation status before editing. [docs/Requirements.md](docs/Requirements.md) is a feature index; [docs/Design.md](docs/Design.md) describes architecture; [README.md](README.md) covers setup/use. They do not define competing requirements. [docs/Future.md](docs/Future.md) contains nonbinding proposals.
 
-Diary Agent is a local-first Python CLI for:
+## Current work status
 
-- capturing diary updates into daily Markdown files
-- managing persistent TODOs across diary history
-- showing and navigating stored day entries
-- searching diary history with a local Ollama model
+D-01 through D-12 are decided in specification v1.0. D-07's mandatory bundled HTFS integration is implemented and tested. D-01, D-04–06, D-08–09 and D-11–12 have implementation gaps recorded in the specification/design. Passing regressions do not establish full conformance.
 
-## Current Status
+Follow the decided contract when fixing an affected workflow, rather than treating a known contradiction as a requirement. Keep changes reviewable and identify the pending target they address.
 
-As of 2026-04-04, the implementation is aligned with the current requirements and the test suite is passing.
+## Module boundaries
 
-Recent fixes already verified:
+- `diary_agent.py`: CLI routing, orchestration and the current domain/storage object.
+- `diary_agent_app/core.py`: config/parsing I/O, date/TODO helpers, retrieval and shortlisting.
+- `diary_agent_app/models.py`: shared records.
+- `diary_agent_app/llm.py`: calls/prompts for LLM-01's five tasks.
+- `diary_agent_app/htfs_adapter.py`: the only HTFS integration boundary.
+- `diary_agent_app/ui.py`: editor, dialogs, viewer, picker and completion.
+- `tests/test_diary_agent.py`: regressions and backend integration.
 
-- nested prompt_toolkit editor calls now run in thread mode when launched from an active asyncio context
-- `show` tag editing now initializes the HTFS adapter before wiring `t`-key callbacks
-- the current focused behavior is covered by `tests/test_diary_agent.py`
+## Editing workflow
 
-The current code lives primarily in:
+- Prefer the smallest change satisfying the applicable clauses. Avoid abstractions unless they reduce real complexity.
+- Preserve module boundaries, readable Markdown and the stable CLI entrypoint. Identity/storage migrations require an explicit contract change.
+- Keep strict date validation under DATA-04; do not accept unrelated formats silently.
+- Read CAP-04/06/10–13 before capture changes: D-01 consent/verbatim behavior is not implemented everywhere.
+- Read DATA-07–09 and VIEW-08–09 before section changes: unique targets and unrelated-byte preservation are decided obligations.
+- Read PERSIST-01–05 and TAG-07 before tag replacement/deletion/cancellation changes. Never conflate cancelled and accepted-empty.
+- Follow TODO-02/08 for D-11: generated TODO dates use `DD-MM-YYYY`, while existing values and verbatim text are preserved. This does not change diary filename/day-input syntax. Date expansion requires an accepted LLM proposal for an open task; generated priorities are low/medium/high and invalid legacy metadata stays unvalidated.
+- Follow TODO-03/09/10 for D-12: unattended `todos` only lists; invalid/out-of-range input changes no tasks; verify affected-file snapshots and selected raw tasks before writing, rejecting stale selections for refresh/reselection.
+- Do not reintroduce removed features: an automatic progress screen between two editors or LLM reorganization in the viewer. Follow the capture/viewer contracts.
+- Preserve explicit user control. Roadmap ideas do not authorize automatic tagging, new LLM tasks, background content edits or unrelated features.
+- Delete dead code/superseded tests after replacement behavior is covered. Historical tests can encode implementation gaps; update them to approved behavior rather than weakening the contract.
 
-- `diary_agent.py`
-- `diary_agent_app/core.py`
-- `diary_agent_app/llm.py`
-- `diary_agent_app/ui.py`
-- `tests/test_diary_agent.py`
+## Mandatory HTFS
 
-## Architecture
+The pinned `deps/HTFS` submodule supplies the backend:
 
-- `diary_agent.py`
-  CLI entrypoint, command routing, and the main `DiaryAgent` domain object.
-- `diary_agent_app/core.py`
-  Pure helpers for config parsing, tokenization, local retrieval, and shortlist logic.
-- `diary_agent_app/htfs_adapter.py`
-  Adapter for the HTFS (Hierarchical Tagging File System) backend, managing tag relationships and resource tagging.
-- `diary_agent_app/llm.py`
-  Ollama-backed synthesis, search answer generation, and TODO similarity checks.
-- `diary_agent_app/ui.py`
-  `prompt_toolkit` editor, dialogs, show-screen UI, and hierarchical tag selection.
-- `docs/Requirements.md`
-  Source of truth for implemented behavior.
-- `docs/Design.md`
-  Higher-level design description of the current implementation.
+```bash
+git submodule update --init --recursive
+```
 
-## Key Product Rules
+Use its Python API through the adapter, following DEP-01–02 and [docs/HTFS.md](docs/HTFS.md). Do not discover a `tagfs` executable or restore external checkout/config/environment overrides. Keep diary metadata separate from dependency source. Do not edit upstream files or advance the pin incidentally; explicit updates require integration verification.
 
-- Daily diary files are stored as `dd_mm_yyyy.md`.
-- Each appended capture is grouped under a time-only heading like `## 14:30`.
-- In interactive capture:
-  - the user edits in a single prompt_toolkit editor
-  - `Alt+R` explicitly requests an LLM rewrite of the current buffer
-  - the buffer is locked while rewrite is in progress
-  - whatever is in the buffer when `Ctrl+D` is pressed is written verbatim
-- After capture, the user is prompted to apply HTFS tags:
-  - Tag suggestion is NOT automatic; the user must explicitly request suggestions using `Alt+S` in the editor.
-  - Top-level tags are displayed for context.
-  - Autocompletion supports both atomic tag names and full hierarchical paths.
-  - New tags require explicit confirmation before creation.
-- LLM-generated section headings must not be retained in rewritten capture output.
-- Nested bullet hierarchy should be preserved when the LLM rewrite naturally contains sub-points.
-- `show` is read-only and defaults to today when no date is provided.
-- `show` supports:
-  - `[` previous existing entry
-  - `]` next existing entry
-  - `g` fuzzy picker over existing entries
-  - `Space` toggle TODO state
-  - `e` edit the section under the cursor
-  - `t` manage tags for the section under the cursor
-- End-of-history navigation in `show` is a no-op, not an error.
+## UI and LLM guidance
 
-## Editing Guidance
+- Keep prompt_toolkit event-loop-safe. Suspend display for subsidiary prompts and use thread mode when synchronous prompts run from an active asyncio context.
+- Execute model work off the active UI loop. Handle read-only transitions, unlock after failure and keep toolbar hints accurate and nonduplicated.
+- Keep calls/prompts in the LLM module and use callbacks at the UI boundary. LLM-01 is the allowed task inventory.
+- Use target-day history as context, not material to restate. CAP-03 governs heading cleanup/nested bullets; D-01 requires consent to the complete resulting proposal.
 
-- Prefer changing the smallest surface that satisfies the requirement.
-- Preserve the split of responsibilities across `diary_agent.py`, `core.py`, `htfs_adapter.py`, `llm.py`, and `ui.py`.
-- Do not reintroduce removed features unless explicitly asked.
-  Examples:
-  - no automatic rewrite-progress screen between two editors
-  - no LLM-based reorganize action in the show viewer
-- Avoid adding new abstractions unless they reduce real complexity.
-- Keep Markdown storage human-readable.
-- Do not silently weaken validation for date input; explicit day input remains `dd_mm_yyyy` or a relative date integer like `-1`, `+1`, `0`.
+## Verification and documentation
 
-## Tagging System (HTFS)
-
-- Integration with HTFS is managed via `HTFSAdapter`.
-- Tags are hierarchical and stored in an SQLite database (`.tagfs.db`) and an RDF Turtle file (`.tagfs.ttl`).
-- Supported operations include:
-  - Listing all tags and top-level tags.
-  - Building full hierarchical paths (e.g., `Project/DiaryAgent`).
-  - Suggesting tags based on section content using LLM.
-  - Applying tags to specific diary sections (mapped as HTFS resources).
-- All HTFS-related operations must be performed through the adapter to maintain boundary separation.
-
-## UI Guidance
-
-- Interactive editor behavior lives in `diary_agent_app/ui.py`.
-- Keep prompt_toolkit interactions simple and event-loop-safe.
-- Avoid nested prompt_toolkit applications inside an already running application.
-- If background work updates UI state, be careful about read-only buffer transitions and timing.
-- Toolbar messaging should reflect actual behavior and avoid duplicate hints.
-
-## LLM Guidance
-
-- Use Ollama only for the currently implemented tasks:
-  - capture rewrite
-  - TODO similarity decision
-  - search answer synthesis
-- Treat today's existing notes as context, not material to restate.
-- The rewrite prompt must avoid headings and preserve bullet hierarchy when useful.
-- Do not add new LLM tasks unless explicitly requested.
-
-## Testing Expectations
-
-- When behavior changes, update `tests/test_diary_agent.py`.
-- Prefer focused tests for:
-  - capture flow
-  - show navigation
-  - TODO handling
-  - storage format
-- Run at least:
+Update `tests/test_diary_agent.py` when behavior changes. Use focused assertions for outcomes and preserved data in capture, navigation, TODOs, storage and backend failures. Run at least:
 
 ```bash
 python -m py_compile diary_agent.py diary_agent_app/core.py diary_agent_app/llm.py diary_agent_app/ui.py
 pytest -q tests/test_diary_agent.py
 ```
 
-- If docs behavior changes, update:
-  - `README.md`
-  - `docs/Requirements.md`
-  - `docs/Design.md` when the implementation model changes materially
+For changed contracts/encodings, update model/review and regenerate evidence:
 
-## Cleanup Guidance
+```bash
+python3 scripts/specification/check_consistency.py --output docs/specification/evidence.json
+```
 
-- Prefer deleting dead code over leaving stale helpers behind.
-- If a feature is no longer in the requirements, remove its code and tests unless there is a clear reason to keep it.
-- Keep the implementation aligned with `docs/Requirements.md`.
-
-## When Unsure
-
-- Treat `docs/Requirements.md` as the behavior contract.
-- Treat `docs/Design.md` as the current intended implementation model.
-- Preserve user control in interactive flows.
+For an authorized behavior change, update the specification first, then its requirements index and README. Update Design when boundaries/flows change. Keep approved target, current implementation and evidence separate. Reference IDs instead of duplicating long normative passages. Record unresolved product choices rather than inventing assumptions to make a check pass.

@@ -1,0 +1,582 @@
+{
+  "method": "Python standard-library exhaustive finite models and explicit counterexamples",
+  "python": "3.13.9",
+  "catalog_backend": "dependency-free Markdown retrieval",
+  "catalog_structure": {
+    "concepts": 220,
+    "nodes": 2132,
+    "errors": []
+  },
+  "input_sha256": {
+    "AGENTS.md": "100c5eb4ccbbae1f89b4a1e0c819fd65a19099bc952743643902f3a636134e95",
+    "README.md": "1891a25cb693e38ba94108f15484feb9185d73601fa142a201050ee0808abf1e",
+    "docs/Requirements.md": "8aabd543808fe2e1d27472080bc87e45a6814a9dd770d5b79b72651006b8668a",
+    "docs/Design.md": "a097c496c8e612a09c0433f8fdfc555d3005f01cba65c3005508b1014cf7f9bc",
+    "docs/Future.md": "927fc13a0b1382fcc9d4bb446e4d3120b09244b9d743c1508f08fd64ab0c8567",
+    "docs/Specification.md": "1b9fe10ad3d76f131668087e315431c361129710184c344d0d4be135d6796182",
+    "docs/specification/MathematicalModel.md": "efab16adcbbe65e6403a70e10830b4c5065bbbc87e7c593b016317e72838db41",
+    "docs/specification/ConsistencyReview.md": "1d27596ba43b7b5075cf6d44ea31cd2f80951f8b7d7856e5889648a2fcc68d94",
+    "docs/HTFS.md": "c014ed80a03c0c285f5850c6475ae966b40b1e3728086d58c41faa4205ed49e4",
+    ".gitmodules": "e9dafd4f463be8ddd3295656ef4f574d05354fa6c082e9072de9b066a93cae89",
+    "requirements.txt": "beb3892a94eba54563b2e91489b1e1acefa903290f2dc285d85d65048d0bb43b",
+    "Makefile": "78a2114534432ee6fceeb607d006951309d3ea1a76fd1c0945057a3e8899d4dc",
+    "pytest.ini": "208d38c296a8bafc454f1297be6dda50afce48efe611051f58669f5d3726c6cc",
+    "diary_agent.py": "ed40598a3a312adee5272383453353f8026481c6d18c1a339efd0a1fa151ebaf",
+    "diary_agent_app/core.py": "4a37e398dc51a61217c0fcafe7f7df82533318c8b03a012d7de9c42b22b04af1",
+    "diary_agent_app/models.py": "225ee2efca1eb9fb38258becd169bc8a00560ff30e22f24cc7cbe356b1ac4af7",
+    "diary_agent_app/htfs_adapter.py": "6346217196edaada90b89a0a9bad45665d8c21978d0dd616e7902bfc7d2361fa",
+    "tests/test_diary_agent.py": "8908cb17c35a140db680f82178004072ab1fdd1d969e00375688fee3f374b4af",
+    "scripts/specification/check_consistency.py": "72e486ceb6a5a46a464447d6f4182e87edc8402447be514212962cf403800c21"
+  },
+  "catalog_sha256": {
+    "concepts/PropositionalLogic.md": "1b9508c76a8899b636e89c68f53d143b8abf5ead8ca7b0682f98d8e04152e547",
+    "concepts/PropositionalFormula.md": "a6fed2702d751af819be43426ab2b302f658d958b831e58d1b5cfeaa46906cca",
+    "concepts/HoareTriple.md": "3bb69dea989349b7cd7b189a43464f10d20aef6a48eed3b1c86f08d887fc5e99",
+    "concepts/TransitionSystem.md": "ef94e179f22c87ae0e353b42070c51fe1c64c1840dc1f603184f5d18d18b9b26",
+    "concepts/SumType.md": "7a0baa90a9f102aa88871dbf4a45974758ef345683922e6c097494739544b6a0",
+    "concepts/Function.md": "76f115b75dba0cb58e6cdd9b41ce11c0b99633833038ef2c97759c515c879938",
+    "concepts/TotalOrder.md": "0a869cf0ada52de382103235483d280191ca4dcef897aa18b2f28ce9b8257b57",
+    "concepts/EquivalenceRelation.md": "d2c7f7cb61aaab107d6cab200e07ff8a4fd6ee2bc50670991049bfb5b542421b",
+    "concepts/CandidateKey.md": "c7d3e71ae2dec70e4f19e2789ff74d7b4b66dbd8542eb7b8272c27b20c13d51d"
+  },
+  "skill_sha256": {
+    "ai/skills/specification-consistency/SKILL.md": "f9f824163f7abcc7d9c2288549e14fe8772a8b6b8c739d723ee3a2a2e950ce74",
+    "ai/skills/specification-consistency/references/checking-and-reporting.md": "c18ce5fb5f5d182018955e67061d4a5d44e9110b8db3dfb82ab9015b6a06bb11",
+    "ai/skills/specification-consistency/references/boolean-example.md": "561e8d0f1c9de230ccb751698a9b034eab862fb3efa5b4309962b76186949f96"
+  },
+  "skill_example": {
+    "valuation_count": 4,
+    "pair_witnesses": {
+      "R1+R2": [
+        [
+          true,
+          false
+        ],
+        [
+          true,
+          true
+        ]
+      ],
+      "R1+S1": [
+        [
+          false,
+          false
+        ]
+      ],
+      "R2+S1": [
+        [
+          false,
+          true
+        ]
+      ]
+    },
+    "full_set": "UNSAT",
+    "original_outputs": {
+      "False": [],
+      "True": [
+        false,
+        true
+      ]
+    },
+    "repaired_outputs": {
+      "False": [
+        false
+      ],
+      "True": [
+        false,
+        true
+      ]
+    }
+  },
+  "save": {
+    "SC-01": {
+      "original_conflict": {
+        "clauses": [
+          "LEGACY-VERBATIM",
+          "LEGACY-TODO-02[relative-date-input]"
+        ],
+        "single_clause_removal_witnesses": {
+          "LEGACY-VERBATIM": [
+            true
+          ],
+          "LEGACY-TODO-02[relative-date-input]": [
+            false
+          ]
+        }
+      },
+      "repair_coverage": [
+        {
+          "llm_used": false,
+          "proposal_changed": false,
+          "consent": false,
+          "changed_outputs": [
+            false
+          ]
+        },
+        {
+          "llm_used": false,
+          "proposal_changed": false,
+          "consent": true,
+          "changed_outputs": [
+            false
+          ]
+        },
+        {
+          "llm_used": false,
+          "proposal_changed": true,
+          "consent": false,
+          "changed_outputs": [
+            false
+          ]
+        },
+        {
+          "llm_used": false,
+          "proposal_changed": true,
+          "consent": true,
+          "changed_outputs": [
+            false
+          ]
+        },
+        {
+          "llm_used": true,
+          "proposal_changed": false,
+          "consent": false,
+          "changed_outputs": [
+            false
+          ]
+        },
+        {
+          "llm_used": true,
+          "proposal_changed": false,
+          "consent": true,
+          "changed_outputs": [
+            false
+          ]
+        },
+        {
+          "llm_used": true,
+          "proposal_changed": true,
+          "consent": false,
+          "changed_outputs": [
+            false
+          ]
+        },
+        {
+          "llm_used": true,
+          "proposal_changed": true,
+          "consent": true,
+          "changed_outputs": [
+            true
+          ]
+        }
+      ],
+      "verbatim_text_cases": 9
+    },
+    "SC-02": {
+      "original_conflict": {
+        "clauses": [
+          "v0.1-DATA-02[nonempty]",
+          "CAP-12[all-redundant]"
+        ],
+        "single_clause_removal_witnesses": {
+          "v0.1-DATA-02[nonempty]": [
+            false
+          ],
+          "CAP-12[all-redundant]": [
+            true
+          ]
+        }
+      },
+      "repair_coverage": [
+        {
+          "mode": "verbatim",
+          "nonempty": false,
+          "all_redundant": false,
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "mode": "verbatim",
+          "nonempty": false,
+          "all_redundant": true,
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "mode": "verbatim",
+          "nonempty": true,
+          "all_redundant": false,
+          "outputs": [
+            true
+          ]
+        },
+        {
+          "mode": "verbatim",
+          "nonempty": true,
+          "all_redundant": true,
+          "outputs": [
+            true
+          ]
+        },
+        {
+          "mode": "accepted_proposal",
+          "nonempty": false,
+          "all_redundant": false,
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "mode": "accepted_proposal",
+          "nonempty": false,
+          "all_redundant": true,
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "mode": "accepted_proposal",
+          "nonempty": true,
+          "all_redundant": false,
+          "outputs": [
+            true
+          ]
+        },
+        {
+          "mode": "accepted_proposal",
+          "nonempty": true,
+          "all_redundant": true,
+          "outputs": [
+            false
+          ]
+        }
+      ]
+    }
+  },
+  "llm": {
+    "SC-03": {
+      "legacy_uncovered_inputs": [
+        {
+          "configured": true,
+          "task": "tag_suggestion"
+        },
+        {
+          "configured": true,
+          "task": "tag_translation"
+        }
+      ],
+      "expanded_profile_coverage": [
+        {
+          "configured": false,
+          "task": "rewrite",
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "configured": false,
+          "task": "todo_similarity",
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "configured": false,
+          "task": "answer",
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "configured": false,
+          "task": "tag_suggestion",
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "configured": false,
+          "task": "tag_translation",
+          "outputs": [
+            false
+          ]
+        },
+        {
+          "configured": true,
+          "task": "rewrite",
+          "outputs": [
+            true
+          ]
+        },
+        {
+          "configured": true,
+          "task": "todo_similarity",
+          "outputs": [
+            true
+          ]
+        },
+        {
+          "configured": true,
+          "task": "answer",
+          "outputs": [
+            true
+          ]
+        },
+        {
+          "configured": true,
+          "task": "tag_suggestion",
+          "outputs": [
+            true
+          ]
+        },
+        {
+          "configured": true,
+          "task": "tag_translation",
+          "outputs": [
+            true
+          ]
+        }
+      ]
+    }
+  },
+  "editor": {
+    "initial_states": 4,
+    "reachable_states": 64,
+    "checked_edges": 768,
+    "events_per_state": 12,
+    "safety": "PASS for complete reachable finite reference model",
+    "progress": "NOT CLAIMED; waiting self-loop permits noncompletion",
+    "witness_trace": [
+      {
+        "configured": true,
+        "phase": "editing",
+        "draft": "raw",
+        "suggested": false,
+        "saved": false,
+        "proposal": null,
+        "accepted": false
+      },
+      {
+        "configured": true,
+        "phase": "rewriting",
+        "draft": "raw",
+        "suggested": false,
+        "saved": false,
+        "proposal": null,
+        "accepted": false
+      },
+      {
+        "configured": true,
+        "phase": "reviewing",
+        "draft": "raw",
+        "suggested": false,
+        "saved": false,
+        "proposal": "rewritten",
+        "accepted": false
+      },
+      {
+        "configured": true,
+        "phase": "editing",
+        "draft": "rewritten",
+        "suggested": false,
+        "saved": false,
+        "proposal": null,
+        "accepted": true
+      },
+      {
+        "configured": true,
+        "phase": "closed",
+        "draft": "rewritten",
+        "suggested": false,
+        "saved": true,
+        "proposal": null,
+        "accepted": true
+      }
+    ]
+  },
+  "cancellation": {
+    "SC-04": {
+      "repair_inputs": 20,
+      "repair_coverage": "PASS",
+      "case_counts": {
+        "cancelled": 4,
+        "accepted_empty": 4,
+        "accepted_nonempty": 12
+      },
+      "decision": "D-09 approved; runtime repair pending",
+      "collapsed_representation": [],
+      "same_previous_tags": [
+        "Project"
+      ],
+      "required_cancel_output": [
+        "Project"
+      ],
+      "required_accept_empty_output": []
+    }
+  },
+  "relations": {
+    "SC-05": {
+      "dates": [
+        "31_12_2025.md",
+        "01_01_2026.md",
+        "31_03_2026.md",
+        "01_04_2026.md"
+      ],
+      "lexical_order": [
+        "01_01_2026.md",
+        "01_04_2026.md",
+        "31_03_2026.md",
+        "31_12_2025.md"
+      ],
+      "order_triples_checked": 64,
+      "invalid_filename_examples": [
+        "notes.md",
+        "31_02_2026.md",
+        "1_04_2026.md",
+        "2026_04_01.md"
+      ],
+      "inventory_cases_checked": 16,
+      "neighbor_inputs_checked": 64
+    },
+    "SC-06": {
+      "A": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "B": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "f"
+      ],
+      "C": [
+        "a",
+        "b",
+        "c",
+        "f",
+        "g"
+      ],
+      "A_near_B": true,
+      "B_near_C": true,
+      "A_near_C": false,
+      "accepted_A_B_C": [
+        [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e"
+        ],
+        [
+          "a",
+          "b",
+          "c",
+          "f",
+          "g"
+        ]
+      ],
+      "accepted_B_A_C": [
+        [
+          "a",
+          "b",
+          "c",
+          "d",
+          "f"
+        ]
+      ]
+    }
+  },
+  "identity": {
+    "SC-07": {
+      "duplicate_input_ids": [
+        "14_11_2026.md#14:30",
+        "14_11_2026.md#14:30"
+      ],
+      "fresh_heading_witness": [
+        "14_11_2026.md#14:30",
+        "14_11_2026.md#14:30:2"
+      ],
+      "heading_sequences_checked": 40,
+      "operation_inputs_checked": 720,
+      "outcome_counts": {
+        "viewable": 120,
+        "missing": 225,
+        "ambiguous": 120,
+        "allowed": 255
+      },
+      "rename_witnesses": [
+        "15_11_2026.md#14:30",
+        "14_11_2026.md#15:00"
+      ],
+      "scope": "finite D-05 policy model, not Markdown parsing or implementation conformance"
+    }
+  },
+  "preservation": {
+    "SC-08": {
+      "input_cases_checked": 486,
+      "successful_span_updates": 162,
+      "unchanged_error_outcomes": 324,
+      "scope": "supplied spans and exact byte postconditions; no parsing or real file writes"
+    }
+  },
+  "required_dependency": {
+    "SC-09": {
+      "input_cases_checked": 80,
+      "ready_outcomes": 10,
+      "explicit_failure_outcomes": 70,
+      "scope": "mandatory startup gate, not later write/recovery guarantees"
+    }
+  },
+  "recovery": {
+    "SC-10": {
+      "operation_cases_checked": 48,
+      "outcome_counts": {
+        "failed": 30,
+        "uncertain": 9,
+        "partial": 3,
+        "complete": 6
+      },
+      "metadata_retry_cases_checked": 288,
+      "successful_repairs": 21,
+      "completed_receipt_replays": 36,
+      "scope": "finite observed-outcome/replay policy; not storage, crash, or concurrency verification"
+    }
+  },
+  "todo_metadata": {
+    "SC-11": {
+      "due_fixtures": 12,
+      "validated_due_fixtures": 6,
+      "unvalidated_due_fixtures": 6,
+      "generated_date_round_trips": 4,
+      "priority_fixtures": 6,
+      "relative_date_cases": 324,
+      "consented_open_task_proposals": 20,
+      "preserved_text_cases": 304,
+      "out_of_range_errors": 7,
+      "scope": "finite metadata/proposal reference model; not general LLM/text interpretation or implementation conformance"
+    }
+  },
+  "todo_selection": {
+    "SC-12": {
+      "selection_fixtures": 11,
+      "source_state_fixtures": 7,
+      "input_cases_checked": 154,
+      "outcome_counts": {
+        "listed": 77,
+        "no_change": 7,
+        "invalid": 49,
+        "stale": 16,
+        "updated": 5
+      },
+      "scope": "finite selection/snapshot reference model; not real TTY routing, file races, or multi-file durability"
+    }
+  },
+  "result": "PASS: expected conflicts reproduced and selected repaired finite models covered",
+  "limitations": "Not a global consistency proof, implementation test, Lean witness, or liveness proof."
+}

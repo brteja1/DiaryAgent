@@ -30,10 +30,9 @@ SECTION_ID_HEADING_RE = re.compile(r"^(?P<base>\d{2}:\d{2})(?::(?P<serial>[1-9]\
 
 
 class DiaryAgent:
-    def __init__(self, diary_dir: Path, model: str | None, htfs_path: Path | None = None) -> None:
+    def __init__(self, diary_dir: Path, model: str | None) -> None:
         self.diary_dir = diary_dir
         self.model = model.strip() if isinstance(model, str) and model.strip() else None
-        self.htfs_path = htfs_path or core.default_htfs_path()
 
     @property
     def llm_enabled(self) -> bool:
@@ -155,7 +154,7 @@ class DiaryAgent:
 
     def get_section_tags(self, file_path: Path) -> dict[str, list[str]]:
         """Get tags for all sections in a file."""
-        adapter = HTFSAdapter(self.diary_dir, self.htfs_path)
+        adapter = HTFSAdapter(self.diary_dir)
         sections = self.parse_day_sections(file_path)
         return {s.heading: adapter.section_tags(s) for s in sections}
 
@@ -444,7 +443,7 @@ class DiaryAgent:
         if target_section is None:
             return None
 
-        adapter = HTFSAdapter(self.diary_dir, self.htfs_path)
+        adapter = HTFSAdapter(self.diary_dir)
         adapter.delete_section_resource(target_section)
 
         new_content = ""
@@ -458,7 +457,7 @@ class DiaryAgent:
 
     def set_section_tags(self, section: DiarySection, tags: list[str]) -> list[str]:
         """Clear and set new tags for a section."""
-        adapter = HTFSAdapter(self.diary_dir, self.htfs_path)
+        adapter = HTFSAdapter(self.diary_dir)
         adapter.clear_section_tags(section)
         if tags:
             adapter.add_tags(tags)
@@ -476,7 +475,7 @@ class DiaryAgent:
             return []
 
         results: list[SearchResult] = []
-        adapter = HTFSAdapter(self.diary_dir, self.htfs_path)
+        adapter = HTFSAdapter(self.diary_dir)
         allowed_sections = section_ids if section_ids is not None else None
         for file_path in sorted(self.diary_dir.glob("*.md")):
             sections = self.parse_day_sections(file_path)
@@ -484,10 +483,7 @@ class DiaryAgent:
                 for section in sections:
                     if allowed_sections is not None and section.section_id not in allowed_sections:
                         continue
-                    try:
-                        section_tags = tuple(adapter.section_tags(section))
-                    except RuntimeError:
-                        section_tags = ()
+                    section_tags = tuple(adapter.section_tags(section))
                     tag_score = score_text(" ".join(section_tags), tokens) if section_tags else 0
                     section_chunks = list(split_chunks(section.body))
                     if not section_chunks and tag_score > 0:
@@ -683,8 +679,8 @@ def parse_config_text(text: str) -> dict[str, str]:
     return core.parse_config_text(text)
 
 
-def write_config(config_path: Path, diary_dir: Path, llm_model: str, htfs_path: Path) -> None:
-    core.write_config(config_path, diary_dir, llm_model, htfs_path)
+def write_config(config_path: Path, diary_dir: Path, llm_model: str | None) -> None:
+    core.write_config(config_path, diary_dir, llm_model)
 
 
 def load_or_initialize_config() -> AppConfig:
@@ -868,8 +864,8 @@ def resolve_section(agent: DiaryAgent, day_text: str, time_text: str) -> DiarySe
     return section
 
 
-def get_htfs_adapter(diary_dir: Path, htfs_path: Path | None = None) -> HTFSAdapter:
-    adapter = HTFSAdapter(diary_dir, htfs_path)
+def get_htfs_adapter(diary_dir: Path) -> HTFSAdapter:
+    adapter = HTFSAdapter(diary_dir)
     adapter.ensure_initialized()
     return adapter
 
@@ -888,7 +884,7 @@ def run_capture(agent: DiaryAgent, raw_text: str | None = None, day_text: str | 
     agent.day_file(day_text)
     base_date = _todo_reference_base_date(day_text=day_text)
     if raw_text is None:
-        adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+        adapter = get_htfs_adapter(agent.diary_dir)
         all_tags = adapter.list_tags()
         rewrite_callback = None
         suggest_callback = None
@@ -1019,7 +1015,7 @@ def run_search(agent: DiaryAgent, query: str | None = None, tag_filter: str | No
     adapter: HTFSAdapter | None = None
 
     if tag_filter:
-        adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+        adapter = get_htfs_adapter(agent.diary_dir)
         tag_expression = _resolve_tag_expression(agent, adapter, tag_filter)
         if not tag_expression:
             print("No diary sections matched the provided tag filter.")
@@ -1041,10 +1037,7 @@ def run_search(agent: DiaryAgent, query: str | None = None, tag_filter: str | No
         tagged_sections = agent.sections_for_ids(section_ids)
         tag_results: list[SearchResult] = []
         for section in tagged_sections:
-            try:
-                section_tags = tuple(adapter.section_tags(section))
-            except RuntimeError:
-                section_tags = ()
+            section_tags = tuple(adapter.section_tags(section))
             tag_results.append(
                 SearchResult(
                     file_path=section.file_path,
@@ -1111,48 +1104,49 @@ def run_show_day(agent: DiaryAgent, day_text: str | None = None) -> int:
         return 0
 
     body = path.read_text(encoding="utf-8").rstrip()
-    adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+    adapter = get_htfs_adapter(agent.diary_dir)
     try:
-        show_suggest_tags = (
-            (lambda text: agent.suggest_tags_for_text(text, adapter.list_tags()))
-            if agent.llm_enabled
-            else None
-        )
-        show_diary_entry(
-            path.name,
-            body,
-            previous_entry=lambda current_title: agent.adjacent_entry(
-                agent.diary_dir / current_title,
-                -1,
-            ),
-            next_entry=lambda current_title: agent.adjacent_entry(
-                agent.diary_dir / current_title,
-                1,
-            ),
-            pick_entry=agent.entry_options,
-            get_tags=lambda current_title: agent.get_section_tags(agent.diary_dir / current_title),
-            toggle_todo=lambda current_title, line: agent.toggle_todo(agent.diary_dir / current_title, line),
-            update_section=lambda current_title, heading, body: agent.update_section(agent.diary_dir / current_title, heading, body),
-            set_tags=lambda current_title, heading, tags: agent.set_section_tags(
-                DiarySection(agent.diary_dir / current_title, heading, ""),
-                tags
-            ),
-            get_all_tags=lambda: (adapter.list_tags(), adapter.get_top_level_tags(), adapter.get_all_tag_paths()),
-            suggest_tags=show_suggest_tags,
-            delete_section=lambda current_title, heading: agent.delete_section(
-                agent.diary_dir / current_title,
-                heading,
-            ),
-        )
-
+        ui.require_prompt_toolkit()
     except RuntimeError:
         print(f"[{path.name}]")
         print(body)
+        return 0
+    show_suggest_tags = (
+        (lambda text: agent.suggest_tags_for_text(text, adapter.list_tags()))
+        if agent.llm_enabled
+        else None
+    )
+    show_diary_entry(
+        path.name,
+        body,
+        previous_entry=lambda current_title: agent.adjacent_entry(
+            agent.diary_dir / current_title,
+            -1,
+        ),
+        next_entry=lambda current_title: agent.adjacent_entry(
+            agent.diary_dir / current_title,
+            1,
+        ),
+        pick_entry=agent.entry_options,
+        get_tags=lambda current_title: agent.get_section_tags(agent.diary_dir / current_title),
+        toggle_todo=lambda current_title, line: agent.toggle_todo(agent.diary_dir / current_title, line),
+        update_section=lambda current_title, heading, body: agent.update_section(agent.diary_dir / current_title, heading, body),
+        set_tags=lambda current_title, heading, tags: agent.set_section_tags(
+            DiarySection(agent.diary_dir / current_title, heading, ""),
+            tags
+        ),
+        get_all_tags=lambda: (adapter.list_tags(), adapter.get_top_level_tags(), adapter.get_all_tag_paths()),
+        suggest_tags=show_suggest_tags,
+        delete_section=lambda current_title, heading: agent.delete_section(
+            agent.diary_dir / current_title,
+            heading,
+        ),
+    )
     return 0
 
 
 def run_tags_show(agent: DiaryAgent, day_text: str, time_text: str | None) -> int:
-    adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+    adapter = get_htfs_adapter(agent.diary_dir)
     if time_text:
         section = resolve_section(agent, day_text, time_text)
         tags = adapter.section_tags(section)
@@ -1189,7 +1183,7 @@ def run_tags_apply(
     tags: Sequence[str],
 ) -> int:
     section = resolve_section(agent, day_text, time_text)
-    adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+    adapter = get_htfs_adapter(agent.diary_dir)
     adapter.add_tags(tags)
     unsuccessful = adapter.tag_section(section, resource_tags_for_specs(tags))
     if unsuccessful:
@@ -1203,7 +1197,7 @@ def run_tags_apply(
 
 def run_tags_suggest(agent: DiaryAgent, day_text: str, time_text: str) -> int:
     section = resolve_section(agent, day_text, time_text)
-    adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+    adapter = get_htfs_adapter(agent.diary_dir)
     available_tags = adapter.list_tags()
     if not available_tags:
         print("No HTFS tags are available to suggest from.")
@@ -1219,7 +1213,7 @@ def run_tags_suggest(agent: DiaryAgent, day_text: str, time_text: str) -> int:
 
 
 def run_tags_list(agent: DiaryAgent) -> int:
-    adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+    adapter = get_htfs_adapter(agent.diary_dir)
     tags = adapter.list_tags()
     if not tags:
         print("No HTFS tags found.")
@@ -1230,7 +1224,7 @@ def run_tags_list(agent: DiaryAgent) -> int:
 
 
 def run_tags_tree(agent: DiaryAgent, root_tag: str | None = None) -> int:
-    adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+    adapter = get_htfs_adapter(agent.diary_dir)
     available_tags = set(adapter.list_tags())
     if root_tag is not None and root_tag not in available_tags:
         print(f"Tag not found: {root_tag}")
@@ -1280,7 +1274,7 @@ def run_tags_delete(
     only_unused: bool | None = None,
     yes: bool = False,
 ) -> int:
-    adapter = get_htfs_adapter(agent.diary_dir, agent.htfs_path)
+    adapter = get_htfs_adapter(agent.diary_dir)
     available_tags = adapter.list_tags()
     if tag_name not in available_tags:
         print(f"Tag not found: {tag_name}")
@@ -1467,12 +1461,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     command = args.command or "capture"
     try:
+        HTFSAdapter.require_backend()
         config = load_or_initialize_config()
         agent = DiaryAgent(
             diary_dir=config.diary_dir,
             model=args.model or config.llm_model,
-            htfs_path=config.htfs_path,
         )
+        agent.ensure_storage()
+        get_htfs_adapter(agent.diary_dir).list_tags()
         if command == "capture":
             return run_capture(agent, raw_text=getattr(args, "text", None), day_text=getattr(args, "day", None))
         if command == "search":

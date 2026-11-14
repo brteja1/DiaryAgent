@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -11,9 +12,8 @@ from .models import DiarySection
 class HTFSAdapter:
     """Small boundary-aware adapter between DiaryAgent sections and HTFS resources."""
 
-    def __init__(self, boundary: Path, import_path: Path | None = None) -> None:
+    def __init__(self, boundary: Path) -> None:
         self.boundary = boundary.resolve()
-        self.import_path = (import_path or core.default_htfs_path()).expanduser().resolve()
 
     @property
     def sqlite_path(self) -> Path:
@@ -55,15 +55,45 @@ class HTFSAdapter:
             return None
         return agent.section_for_id(section_id)
 
-    def _client(self):
+    @staticmethod
+    def require_backend():
+        """Load only the bundled backend, without touching the diary boundary."""
+        backend_path = core.default_htfs_path().resolve()
+        package_path = backend_path / "htfs"
+        if not (package_path / "__init__.py").is_file():
+            raise RuntimeError(
+                f"Required HTFS submodule is missing at {backend_path}. "
+                "Run 'git submodule update --init --recursive' from the Diary Agent repository."
+            )
+
+        def require_bundled(module):
+            source = getattr(module, "__file__", None)
+            if source is None or not Path(source).resolve().is_relative_to(package_path):
+                raise RuntimeError(
+                    "A different HTFS package is already loaded. Restart using the Diary Agent "
+                    f"environment with the bundled backend at {backend_path}."
+                )
+
+        existing = sys.modules.get("htfs")
+        if existing is not None:
+            require_bundled(existing)
+        backend_path_text = str(backend_path)
+        if not sys.path or sys.path[0] != backend_path_text:
+            sys.path.insert(0, backend_path_text)
         try:
-            import_path_text = str(self.import_path)
-            if import_path_text not in sys.path:
-                sys.path.insert(0, import_path_text)
-            from htfs import HTFS  # type: ignore
+            package = importlib.import_module("htfs")
+            module = importlib.import_module("htfs.core")
         except ImportError as exc:  # pragma: no cover - environment boundary
-            raise RuntimeError(f"HTFS is not importable from {self.import_path}") from exc
-        return HTFS(str(self.boundary))
+            raise RuntimeError(
+                f"Required bundled HTFS cannot be imported: {exc}. "
+                "Initialize submodules, then run 'python -m pip install -r requirements.txt'."
+            ) from exc
+        require_bundled(package)
+        require_bundled(module)
+        return module.HTFS
+
+    def _client(self):
+        return self.require_backend()(str(self.boundary))
 
     def add_tags(self, tags: Iterable[str]) -> list[str]:
         client = self._client()

@@ -1,0 +1,3 @@
+[submodule "deps/HTFS"]
+	path = deps/HTFS
+	url = https://github.com/brteja1/HTFS.git

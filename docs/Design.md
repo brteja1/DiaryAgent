@@ -1,296 +1,72 @@
-# Diary Agent Design
+# Diary Agent architecture
 
-## Overview
+This document describes the current implementation and the architectural changes needed for approved targets. [Specification.md](Specification.md) is the behavior authority; [Requirements.md](Requirements.md) is its feature index. Design explanations do not override clauses or imply that pending targets are implemented.
 
-The diary agent is a local-first Python CLI for capturing daily notes, managing persistent TODOs, viewing prior entries, and querying diary history using a locally reachable Ollama model. The current implementation is organized around four user-facing workflows:
+## Current module boundaries
 
-- capture a free-form update into today's diary file or an explicitly requested day file
-- review and complete open TODOs across diary history
-- view a day entry and navigate to other existing entries
-- search historical diary content with a natural-language question
+| Module | Current responsibilities |
+| --- | --- |
+| [`diary_agent.py`](../diary_agent.py) | CLI routing, `DiaryAgent`, file/section operations, TODO orchestration, search composition and compatibility wrappers. It still contains substantial domain/storage logic. |
+| [`core.py`](../diary_agent_app/core.py) | Config parsing/prompting/I/O, date/TODO helpers, tokenization, lexical scoring and shortlisting. It is not wholly side-effect-free. |
+| [`models.py`](../diary_agent_app/models.py) | Frozen `AppConfig`, `PendingTask`, `SimilarTodoMatch`, `DiaryEntryOption`, `DiarySection` and `SearchResult` records. Config has diary directory and optional model. |
+| [`llm.py`](../diary_agent_app/llm.py) | Ollama calls for LLM-01's five tasks, prompts, heading cleanup and model errors. |
+| [`htfs_adapter.py`](../diary_agent_app/htfs_adapter.py) | Bundled import/origin validation, client lifecycle, resource mapping, hierarchy/tag operations and queries. |
+| [`ui.py`](../diary_agent_app/ui.py) | Editor, dialogs, viewer, picker, tag completion, background feedback and event-loop-safe subsidiary prompts. |
+| [`deps/HTFS`](../deps/HTFS) | Pinned upstream backend owning SQLite/RDF tag storage and hierarchy/query semantics. |
+| [`tests/test_diary_agent.py`](../tests/test_diary_agent.py) | Application regressions and temporary-boundary HTFS integration checks. |
+| [`check_consistency.py`](../scripts/specification/check_consistency.py) | Independent finite contract models, not an implementation oracle. |
 
-The implementation currently lives in [`diary_agent.py`](/linuxdev/github/DiaryAgent/diary_agent.py) plus small supporting modules under [`diary_agent_app/`](/linuxdev/github/DiaryAgent/diary_agent_app).
+HTFS access stays behind the adapter. UI code uses callbacks; domain policy should not gain terminal dependencies. Improve these boundaries incrementally without a new framework or incidental storage migration.
 
-## Design Goals
+## Current startup
 
-- Keep diary storage outside the source tree and make it user-configurable.
-- Use a local terminal workflow without requiring a GUI application.
-- Preserve continuity by showing the target day's existing notes to the LLM as background context.
-- Keep TODO handling persistent across all diary files, not just the current day.
-- Reduce accidental TODO duplication with deterministic filtering plus semantic similarity checks.
-- Let the user retain final control over interactive capture output before it is written.
-- Degrade clearly when dependencies or local model connectivity are missing.
-- Work with or without `prompt_toolkit` where feasible.
+The CLI parses arguments first, so help needs no backend initialization. Operational startup validates the bundled HTFS import, loads config, constructs `DiaryAgent`, creates the diary directory if needed, initializes/reads the tagging boundary, and dispatches the command. Failed preflight reports an error before diary-content writes.
 
-## High-Level Architecture
+The parent gitlink pins `deps/HTFS`; setup installs local source through `requirements.txt`. No `tagfs` executable or external checkout is discovered. Legacy `htfs_path` and `DIARY_AGENT_HTFS_PATH` values are ignored. See [HTFS.md](HTFS.md).
 
-The current code is split into a thin CLI/orchestration layer and three small support modules:
+Ollama/model availability and prompt_toolkit presentation are optional. Their workflow-specific fallbacks do not bypass mandatory HTFS (DEP-01–02).
 
-1. [`diary_agent.py`](/linuxdev/github/DiaryAgent/diary_agent.py)
-   Handles CLI parsing, command routing, and the main `DiaryAgent` domain object.
-2. [`diary_agent_app/core.py`](/linuxdev/github/DiaryAgent/diary_agent_app/core.py)
-   Holds shared parsing, config, tokenization, and local search helpers.
-3. [`diary_agent_app/llm.py`](/linuxdev/github/DiaryAgent/diary_agent_app/llm.py)
-   Holds Ollama-backed synthesis, answer generation, and TODO similarity checks.
-4. [`diary_agent_app/ui.py`](/linuxdev/github/DiaryAgent/diary_agent_app/ui.py)
-   Holds `prompt_toolkit` editor, dialogs, and show-viewer interactions.
+## Current data and workflow composition
 
-This keeps deployment simple while still separating terminal behavior, LLM behavior, and file/domain logic.
+Diary content is UTF-8 Markdown. Filenames supply dates; recognized timestamp headings delimit sections. `DiarySection.section_id` derives filename/heading identity; HTFS resources use absolute file paths plus heading fragments. Metadata stays in `.tagfs.db` and `.tagfs.ttl` in the diary boundary, outside dependency source.
 
-## Configuration Model
+`run_capture` selects an editor/stdin path or `--text`. A successful interactive save is followed by section tagging, never a TODO-review prompt. Current saves still normalize checkbox dates and trim text; processed capture also filters duplicates, and model-enabled `--text` synthesizes automatically. These behaviors do not yet satisfy D-01.
 
-The diary path is not derived from the project directory. Instead, startup requires:
+`run_todos` scans checkbox lines across immediate Markdown files and uses the shared checklist or numeric-input fallback. Task locations currently use source paths and one-based line numbers. D-11 metadata and D-12 selection contracts are approved but pending implementation; the current numeric path can prompt unattended and silently ignore out-of-range indices, and completion lacks snapshot guards.
 
-- `~/.config/diary_agent/config.txt`
+`run_show_day` handles day lookup, missing-today substitution and viewer callbacks. The text area is read-only for typing; explicit actions mutate content/tags. Subsidiary prompts use suspended terminal rendering and thread mode where needed. Current filename sorting, section reconstruction and tag-dialog result encoding need the approved fixes below.
 
-Current supported config entries:
+Search scores section-body chunks and tags, optionally restricting section IDs through HTFS. No-model queries print local results; answer-synthesis failures can fall back to the same excerpts. Tag-filter translation/query failures do not silently become unfiltered searches. HTFS read errors propagate rather than appearing as absent tags.
 
-- `diary_path=/path/to/Diary`
-- `llm_model=model_name_available_in_ollama`
+The five LLM operations are rewrite/TODO classification, TODO similarity, answer synthesis, explicit tag suggestions and natural-language filter translation. Rewrite cleanup strips generated headings and preserves useful nested bullets. The current editor applies the returned rewrite directly; D-01 requires a separate review/acceptance state for the complete proposal.
 
-Startup behavior:
+## Changes required by decided targets
 
-- If the config file exists and contains both `diary_path` and `llm_model`, those values are used.
-- If the config file is missing or invalid and the process is interactive, the user is prompted to populate it.
-- If the config file is missing or invalid and the process is non-interactive, startup fails with a clear runtime error.
+| Target | Current gap | Intended implementation responsibility |
+| --- | --- | --- |
+| D-01; CAP-04/06/10–13, TODO-02/04–05 | Immediate rewrite replacement and automatic save-time transformation. | Generate/clean a complete candidate before consent; persist the final user-controlled body unchanged. |
+| D-04; DATA-06, VIEW-03 | Shared filename-sorted navigation/picker list. | Separate all-Markdown scans from valid-dated-file selection; use calendar comparison. |
+| D-05; DATA-07–09 | First-match lookup can hide duplicate headings. | Distinguish missing/unique/ambiguous targets; block ambiguous operations while preserving raw viewing/content. |
+| D-06; VIEW-08–09 | Mutation reconstructs files from parsed sections. | Retain exact source spans and preserve all bytes outside a safely located target. |
+| D-08; PERSIST-01–05 | HTFS-first deletion, suppressed cleanup errors and replacement without recovery records. | Record intent/prior tags, commit combined content changes first, reconcile/verify metadata, and expose safe retry/completion receipts. |
+| D-09; TAG-07 | Cancellation and accepted-empty both return `[]`. | Use distinct outcomes; cancellation calls no mutation, accepted selection enters recovery-aware replacement. |
+| D-11; TODO-02/08 | Current helpers mechanically expand dates in both open and completed checkboxes, emit underscore dates and accept metadata without structured validation. | Generate `DD-MM-YYYY` only in accepted proposals for open tasks; validate known date/priority forms without rewriting legacy text. Preserve completed dates and invalid/unknown metadata. |
+| D-12; TODO-03/09/10 | TTY assumptions, partial acceptance of invalid selections and line-number-only mutation. | Route non-TTY `todos` to listing only. Validate all selections before writing and compare affected-file snapshots plus raw selected tasks; reject stale state for refresh/reselection. Snapshot guards do not imply multi-file atomicity or race isolation. |
 
-This design allows the code and the diary data to live independently.
+D-02 routing, D-03's task inventory and D-07's mandatory dependency agree with their selected contracts. D-10 changes document roles, not runtime architecture.
 
-## Storage Design
+## Recovery design boundary
 
-The configured diary directory contains one Markdown file per day:
+PERSIST-01–05 define the target. Journal schema/location and recovery CLI still need implementation. Records retain identities, expected/intended content fingerprints, prior/intended associations, and progress/errors; tags cannot be reconstructed from diary text alone.
 
-- `dd_mm_yyyy.md`
+Combined changes commit Markdown before HTFS reconciliation. Post-save tagging is a separate metadata operation. Retry inspects current state, stops on divergence/ambiguity, and never reexecutes capture or content mutation. Verified completion retains a receipt preventing replay even after manual changes. Account for backend close/flush/readback before success.
 
-Properties:
+This is an approved architectural obligation, not an existing transaction mechanism. No atomicity across Markdown/SQLite/RDF, automatic rollback, arbitrary concurrent-edit protection or power-loss durability is asserted. Mandatory startup does not prevent later failures.
 
-- The directory is created lazily on demand.
-- The current day's file is created only when something is appended.
-- The filename carries the date; individual captures within the file are grouped under time-only headings like `## 14:30`.
-- Existing content is preserved and new captures are appended with blank-line separation.
-- The system treats all `*.md` files in the configured diary directory as part of history for TODO scanning, show navigation, and search.
+## Verification and evolution
 
-The on-disk format is intentionally Markdown-first. A typical day file looks like:
+Prefer focused outcome/preservation tests in the existing suite. Backend checks use temporary diary boundaries and the pinned package; model/UI behavior can use callbacks/fakes. Record real terminal/Ollama smoke evidence separately from unit tests.
 
-```markdown
-## 09:15
+The [mathematical model](specification/MathematicalModel.md) states selected carriers and bounds; its checks do not establish global consistency or concrete conformance. The [review](specification/ConsistencyReview.md) retains historical conflicts and repair evidence.
 
-- Reviewed deployment logs
-- [ ] Follow up on the retry spike
-
-## 14:30
-
-- Project work
-  - Finished auth cleanup
-  - Added regression coverage
-```
-
-## Core Domain Objects
-
-The implementation currently uses four small data objects:
-
-- `PendingTask`
-  - represents an unchecked task line and its source file/line
-- `SimilarTodoMatch`
-  - represents a new candidate TODO and the existing open TODO it resembles
-- `AppConfig`
-  - represents resolved user configuration, currently `diary_dir` and `llm_model`
-- `DiaryEntryOption`
-  - represents a selectable diary file in the show-screen fuzzy picker
-
-These objects are deliberately narrow and map directly to operational workflows.
-
-## Capture Flow
-
-The capture path is the default CLI behavior.
-
-### Interactive Path (with prompt_toolkit)
-
-1. Resolve config.
-2. Ensure the diary storage directory exists.
-3. Open a multiline `prompt_toolkit` editor.
-4. The user may press `Alt+R` at any point to request an Ollama rewrite of the current buffer.
-5. While the rewrite is running, the buffer is locked read-only and the toolbar shows that the editor is waiting for the LLM rewrite.
-6. When the rewrite finishes, the rewritten text replaces the current editor buffer in place.
-7. The user may keep editing, trigger another rewrite, or press `Ctrl+D` to submit whatever is currently in the buffer.
-8. The submitted text is appended to the target day file verbatim under a time heading.
-
-Important current behavior:
-
-- The interactive final buffer is not post-processed before save.
-- This means user-authored headings or manual structure edits are preserved as entered.
-- The LLM rewrite path itself removes LLM-added section headings and filters out lines already present in the target day file before putting the rewritten draft back into the editor.
-
-### CLI Fallback Path (without prompt_toolkit)
-
-1. Resolve config.
-2. Ensure the diary storage directory exists.
-3. Prompt for input via stdin (empty line or Ctrl-D to finish).
-4. Send the raw text to Ollama for Markdown bullet generation.
-5. Remove duplicate entries deterministically against the target day file.
-6. Review semantically similar TODOs against unresolved historical tasks.
-7. Append the surviving entry to the target day file under a time heading.
-
-Timestamp heading disambiguation:
-
-- The first update in a minute uses `## HH:MM`.
-- If that minute already exists in the same day file, the next update uses `## HH:MM:<serial>` (for example `## 14:30:2`, then `## 14:30:3`).
-- This keeps section ids unique for edit/tag/delete and HTFS resource mapping.
-
-### Non-Interactive Path
-
-The `capture --text "..."` path skips the editor and uses the provided text as input. In this path the rewritten entry still goes through deterministic dedupe and TODO similarity review before append. Similar TODO confirmations fall back to a plain CLI prompt when stdin is a TTY. In fully scripted mode, similar TODOs are skipped automatically. `capture --day dd_mm_yyyy` (or a relative date like `-1`) uses that day's file as the append and dedupe target for either interactive or `--text` capture.
-
-## LLM Integration
-
-The system currently uses Ollama for three tasks.
-
-Model selection comes from the config file by default, with `--model` available as an explicit runtime override.
-
-### 1. Diary Entry Synthesis
-
-Input:
-
-- timestamp
-- the target day's existing diary context
-- raw user update
-
-Output:
-
-- concise Markdown bullets, optionally with nested sub-bullets
-
-The synthesis prompt instructs the LLM to:
-
-- preserve factual content
-- use today's file only as background context
-- rewrite only the new raw update
-- decide semantically whether items are TODOs or regular notes
-- format actionable items as `- [ ] ...`
-- avoid headings, commentary, or section structure
-- preserve hierarchy with nested bullets when appropriate
-- avoid repeating unresolved TODOs already in the diary
-
-The implementation also strips any Markdown headings the LLM still produces before presenting rewritten output back to the user.
-
-### 2. TODO Similarity Decision
-
-For each candidate unchecked TODO that survives exact dedupe, the system can ask Ollama whether it is effectively the same unresolved task as an existing open TODO. The model is instructed to answer only `YES` or `NO`.
-
-This is used as a second-stage filter after lexical shortlisting.
-
-### 3. History Answer Synthesis
-
-For natural-language search, the system retrieves candidate text excerpts first and only then asks Ollama to answer based on those excerpts.
-
-This avoids sending the full diary corpus to the model on every query.
-
-## TODO Management Design
-
-TODO support is global across diary history.
-
-### Detection
-
-Unchecked TODOs are recognized by the Markdown pattern:
-
-- `- [ ] ...`
-- Optional inline metadata such as `[due: ...]` and `[priority: ...]` may follow the task text.
-- Relative date words in new TODO text are normalized to exact diary dates at write time.
-
-Completed TODOs are recognized by:
-
-- `- [x] ...`
-
-### Completion Flow
-
-- The system scans all configured diary Markdown files.
-- It displays open TODOs in a `prompt_toolkit` checkbox dialog (or numbered list in CLI fallback).
-- Selected TODOs are updated in place in their source files.
-- Optional deadline and priority metadata is preserved when a task is marked complete.
-
-### CLI Subcommand
-
-The `todos` subcommand provides dedicated TODO management:
-
-```bash
-python diary_agent.py todos
-```
-
-This reuses the same completion logic as the checklist dialog path.
-
-### Duplicate Prevention
-
-There are two active dedupe layers:
-
-1. Entry-level dedupe
-   - All entry lines are compared against today's existing file
-   - Duplicates within the candidate entry itself are also removed
-   - The comparison is normalized and near-duplicate tolerant, not exact-string only
-
-2. TODO-specific dedupe and similarity review
-   - Open and completed TODO text is tracked across all diary files
-   - Exact duplicate TODOs are removed before append
-   - Candidate TODOs are then checked for semantic similarity against unresolved tasks
-   - Interactive confirmation is available when the flow supports it
-
-## Show Flow
-
-The `show` command supports both direct lookup and in-view navigation:
-
-```bash
-python diary_agent.py show
-python diary_agent.py show "05_03_2026"
-```
-
-Behavior:
-
-- With no argument, `show` defaults to today's date.
-- With a `dd_mm_yyyy` or relative date argument (e.g., `-1`), it opens that specific day.
-- The `prompt_toolkit` viewer is read-only.
-- `[` and `]` move to the previous or next existing diary file in filename/date order.
-- At the ends of history, navigation is a no-op.
-- `g` opens an in-place fuzzy picker over existing diary files.
-- The picker lists newest first and shows a human-readable date plus a preview line.
-- `e` opens a nested editor for the timestamp section under the cursor and writes the edited section back into the current file.
-- `t` opens HTFS tag management for the timestamp section under the cursor.
-- `d` confirms and deletes the timestamp section under the cursor from the current file.
-- Section deletion also removes the corresponding HTFS section resource and associated tags.
-- Without `prompt_toolkit`, the file contents are printed to stdout.
-
-Implementation note:
-
-- The nested editor and tag-management dialogs are launched in an event-loop-safe way so the show screen can invoke them without tripping over the active prompt_toolkit application context.
-
-## HTFS Tag Commands
-
-The `tags` command covers both section-level inspection and taxonomy management:
-
-```bash
-python diary_agent.py tags show 26_03_2026 14:30
-python diary_agent.py tags apply 26_03_2026 14:30 Project/DiaryAgent Topic/Retrieval
-python diary_agent.py tags suggest 26_03_2026 14:30
-python diary_agent.py tags ls
-python diary_agent.py tags tree Project
-python diary_agent.py tags delete Project --descendants --unused-only --yes
-```
-
-Deletion behavior is intentionally explicit:
-
-- `tags delete` removes a tag from the whole HTFS taxonomy.
-- `--descendants` makes deletion recursive over child tags.
-- `--unused-only` blocks deletion if the selected tags are still used by diary resources.
-- `--yes` skips the final confirmation prompt for scripted use.
-
-Inspection helpers are intentionally lightweight:
-
-- `tags ls` prints the flat HTFS tag inventory.
-- `tags tree` prints the hierarchy, and can be rooted at a specific tag to inspect a subtree before deletion.
-
-## Search Flow
-
-The `search` command retrieves local text excerpts using token overlap scoring and then asks the LLM to answer using only those excerpts.
-
-```bash
-python diary_agent.py search "What did I note about the login bug?"
-```
-
-The design intentionally keeps retrieval local and cheap before invoking the model.
+Follow the specification's incremental cleanup sequence. Keep the stable entrypoint, readable data and adapter boundaries, remove obsolete helpers after verification, and update status as targets land. [Future.md](Future.md) is nonbinding and does not authorize new tasks.

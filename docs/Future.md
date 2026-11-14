@@ -1,5 +1,7 @@
 # Future Roadmap
 
+Status: nonbinding proposal archive under D-10. [Specification.md](Specification.md) is the authoritative active contract. Ideas here do not authorize implementation, add LLM tasks, or override explicit consent/tagging rules. Some historical integration steps are already implemented; consult [Design.md](Design.md) and [Requirements.md](Requirements.md) for current status.
+
 This document captures a practical next-stage roadmap for Diary Agent while preserving the current project philosophy:
 
 - local-first
@@ -229,9 +231,9 @@ Two possible approaches:
   - tags are stored in HTFS automatically
   - user can review later
 
-Recommended starting point:
+Active-policy boundary:
 
-- automatic derived tagging with later audit and review tools
+- Current tagging remains explicit under the specification. The automatic-derived-tagging option above is an unapproved historical proposal, not the starting point for current implementation. Any reconsideration requires a separate user decision and specification change.
 
 ### Show Interaction
 

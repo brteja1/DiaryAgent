@@ -36,7 +36,6 @@ class SimilarTodoMatch:
 class AppConfig:
     diary_dir: Path
     llm_model: str | None
-    htfs_path: Path
 
 
 @dataclass(frozen=True)

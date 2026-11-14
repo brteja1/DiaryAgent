@@ -2,6 +2,7 @@ import asyncio
 import datetime as dt
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -46,14 +47,13 @@ def test_load_or_initialize_config_reads_required_entries(monkeypatch, tmp_path)
 
     assert config.diary_dir == fake_home / "journal"
     assert config.llm_model == "qwen2.5"
-    assert config.htfs_path == fake_home / "HTFS"
 
 
 def test_load_or_initialize_config_allows_missing_llm_model(monkeypatch, tmp_path):
     fake_home = tmp_path / "home"
     config_path = fake_home / ".config" / "diary_agent" / "config.txt"
     config_path.parent.mkdir(parents=True)
-    config_path.write_text("diary_path=~/journal\nhtfs_path=~/HTFS\n", encoding="utf-8")
+    config_path.write_text("diary_path=~/journal\n", encoding="utf-8")
     monkeypatch.setattr(diary_agent.Path, "home", lambda: fake_home)
     monkeypatch.setattr(core.Path, "home", lambda: fake_home)
     monkeypatch.setenv("HOME", str(fake_home))
@@ -62,7 +62,6 @@ def test_load_or_initialize_config_allows_missing_llm_model(monkeypatch, tmp_pat
 
     assert config.diary_dir == fake_home / "journal"
     assert config.llm_model is None
-    assert config.htfs_path == fake_home / "HTFS"
 
 
 def test_load_or_initialize_config_non_interactive_missing_required_values_raises(monkeypatch, tmp_path):
@@ -77,37 +76,37 @@ def test_load_or_initialize_config_non_interactive_missing_required_values_raise
         diary_agent.load_or_initialize_config()
 
 
-def test_default_htfs_path_uses_environment_override(monkeypatch, tmp_path):
-    custom_path = tmp_path / "custom-htfs"
-    monkeypatch.setenv(core.DEFAULT_HTFS_PATH_ENV, str(custom_path))
-
-    assert core.default_htfs_path() == custom_path
-    assert diary_agent.core.default_htfs_path() == custom_path
-    assert diary_agent.DiaryAgent(diary_dir=tmp_path, model="test-model").htfs_path == custom_path
-    assert HTFSAdapter(tmp_path).import_path == custom_path.resolve()
-
-
-def test_default_htfs_path_falls_back_to_home_directory(monkeypatch, tmp_path):
-    fake_home = tmp_path / "home"
-    monkeypatch.delenv(core.DEFAULT_HTFS_PATH_ENV, raising=False)
-    monkeypatch.setattr(core.Path, "home", lambda: fake_home)
-
-    assert core.default_htfs_path(home=fake_home, repo_root=tmp_path / "repo") == fake_home / "HTFS"
+def test_bundled_htfs_path_ignores_environment_and_home(monkeypatch, tmp_path):
+    monkeypatch.setenv("DIARY_AGENT_HTFS_PATH", str(tmp_path / "external"))
+    monkeypatch.setattr(core.Path, "home", lambda: tmp_path / "home")
+    expected = Path(diary_agent.__file__).resolve().parent / "deps" / "HTFS"
+    assert core.default_htfs_path() == expected
+    backend = HTFSAdapter.require_backend()
+    assert Path(sys.modules[backend.__module__].__file__).resolve().is_relative_to(expected)
 
 
-def test_write_config_includes_htfs_path(tmp_path):
+def test_load_config_ignores_legacy_htfs_path(monkeypatch, tmp_path):
+    config_path = tmp_path / ".config" / "diary_agent" / "config.txt"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(f"diary_path={tmp_path / 'journal'}\nhtfs_path=/obsolete\n", encoding="utf-8")
+    monkeypatch.setattr(core.Path, "home", lambda: tmp_path)
+    config = core.load_or_initialize_config()
+    assert config.diary_dir == tmp_path / "journal"
+    assert config.llm_model is None
+    assert not hasattr(config, "htfs_path")
+
+
+def test_write_config_needs_only_diary_path_and_optional_model(tmp_path):
     config_path = tmp_path / "config.txt"
     diary_agent.write_config(
         config_path,
         tmp_path / "journal",
         "qwen2.5",
-        tmp_path / "HTFS",
     )
 
     assert config_path.read_text(encoding="utf-8") == (
         f"diary_path={tmp_path / 'journal'}\n"
         f"llm_model=qwen2.5\n"
-        f"htfs_path={tmp_path / 'HTFS'}\n"
     )
 
 
@@ -117,13 +116,73 @@ def test_write_config_omits_llm_model_when_not_configured(tmp_path):
         config_path,
         tmp_path / "journal",
         None,
-        tmp_path / "HTFS",
     )
 
     assert config_path.read_text(encoding="utf-8") == (
         f"diary_path={tmp_path / 'journal'}\n"
-        f"htfs_path={tmp_path / 'HTFS'}\n"
     )
+
+
+def test_cli_requires_bundled_htfs_before_loading_config(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(core, "default_htfs_path", lambda: tmp_path / "missing-htfs")
+    def unexpected_config():
+        pytest.fail("Config/capture must not start without required HTFS")
+    monkeypatch.setattr(diary_agent, "load_or_initialize_config", unexpected_config)
+    assert diary_agent.main(["capture", "--text", "New note"]) == 1
+    assert "git submodule update --init --recursive" in capsys.readouterr().err
+    assert not list(tmp_path.rglob("*.md"))
+
+
+def test_adapter_rejects_preloaded_external_htfs(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "htfs", SimpleNamespace(__file__=str(tmp_path / "htfs/__init__.py")))
+    with pytest.raises(RuntimeError, match="different HTFS package is already loaded"):
+        HTFSAdapter.require_backend()
+
+
+def test_cli_htfs_initialization_failure_prevents_capture(monkeypatch, tmp_path, capsys):
+    diary_dir = tmp_path / "journal"
+    monkeypatch.setattr(diary_agent, "load_or_initialize_config",
+                        lambda: core.AppConfig(diary_dir=diary_dir, llm_model=None))
+    def unavailable(_boundary):
+        raise RuntimeError("HTFS store unavailable")
+    monkeypatch.setattr(diary_agent, "get_htfs_adapter", unavailable)
+    assert diary_agent.main(["capture", "--text", "New note"]) == 1
+    assert "HTFS store unavailable" in capsys.readouterr().err
+    assert not list(diary_dir.glob("*.md"))
+
+
+def test_bundled_htfs_resource_tagging_survives_reopening(tmp_path):
+    section = diary_agent.DiarySection(tmp_path / "14_11_2026.md", "14:30", "A note")
+    adapter = diary_agent.get_htfs_adapter(tmp_path)
+    adapter.add_tags(["Project/DiaryAgent"])
+    assert adapter.tag_section(section, ["DiaryAgent"]) == []
+    reopened = diary_agent.get_htfs_adapter(tmp_path)
+    assert reopened.section_tags(section) == ["DiaryAgent"]
+    assert reopened.resource_path_for_section(section) in reopened.query_resource_paths("DiaryAgent")
+    assert reopened.sqlite_path.is_file()
+    assert reopened.rdf_path.is_file()
+
+
+def test_search_does_not_hide_htfs_read_failures(monkeypatch, tmp_path):
+    (tmp_path / "14_11_2026.md").write_text("## 14:30\n\nA note\n", encoding="utf-8")
+    class BrokenAdapter:
+        def __init__(self, _boundary):
+            pass
+        def section_tags(self, _section):
+            raise RuntimeError("HTFS read failed")
+    monkeypatch.setattr(diary_agent, "HTFSAdapter", BrokenAdapter)
+    with pytest.raises(RuntimeError, match="HTFS read failed"):
+        diary_agent.DiaryAgent(tmp_path, model=None).search("note")
+
+
+def test_show_does_not_mask_runtime_errors_as_ui_fallback(monkeypatch, tmp_path):
+    (tmp_path / "14_11_2026.md").write_text("## 14:30\n\nA note\n", encoding="utf-8")
+    monkeypatch.setattr(ui, "require_prompt_toolkit", lambda: None)
+    def broken_viewer(*_args, **_kwargs):
+        raise RuntimeError("HTFS read failed")
+    monkeypatch.setattr(diary_agent, "show_diary_entry", broken_viewer)
+    with pytest.raises(RuntimeError, match="HTFS read failed"):
+        diary_agent.run_show_day(diary_agent.DiaryAgent(tmp_path, model=None), "14_11_2026")
 
 
 def test_ensure_storage_creates_configured_diary_directory(tmp_path):
@@ -1963,9 +2022,8 @@ def test_run_show_day_falls_back_to_stdout_when_ui_unavailable(monkeypatch, tmp_
         lambda day_text: target,
     )
     monkeypatch.setattr(
-        diary_agent,
-        "show_diary_entry",
-        lambda title, body, previous_entry=None, next_entry=None, pick_entry=None, get_tags=None, toggle_todo=None, **kwargs: (_ for _ in ()).throw(RuntimeError("missing prompt_toolkit")),
+        ui, "require_prompt_toolkit",
+        lambda: (_ for _ in ()).throw(RuntimeError("missing prompt_toolkit")),
     )
 
     exit_code = diary_agent.run_show_day(agent, day_text="05_03_2026")

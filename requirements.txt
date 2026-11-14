@@ -1,3 +1,4 @@
+-e ./deps/HTFS
 ollama
 prompt_toolkit
 pytest
