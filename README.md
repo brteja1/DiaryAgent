@@ -130,34 +130,4 @@ These are recovery guarantees, not atomic transactions, automatic rollback, mult
 
 ## Development and verification
 
-```text
-diary_agent.py                 Stable entrypoint
-diary_agent_app/
-  cli.py                       Arguments, startup and dispatch
-  commands.py                  User workflows and output
-  service.py                   Diary operations without terminal UI
-  markdown.py                  Source spans and localized section mutation
-  persistence.py               Intent journal, outcomes and metadata-only retry
-  todo_metadata.py             Nonmutating metadata interpretation
-  models.py                    Shared records
-  core.py                      Config, parsing, TODO and retrieval helpers
-  llm.py                       Five tasks, shared Ollama transport
-  htfs_adapter.py              Bundled HTFS boundary and session lifecycle
-  ui.py                        Editor, proposal review and dialogs
-  viewer.py                    Viewer/picker and explicit actions
-deps/HTFS/                    Pinned Git submodule
-tests/                        Regression and contract acceptance tests
-scripts/specification/        Independent finite consistency checker
-```
-
-```bash
-python -m py_compile diary_agent.py diary_agent_app/core.py diary_agent_app/llm.py diary_agent_app/ui.py
-pytest -q
-python3 scripts/specification/check_consistency.py --output docs/specification/evidence.json
-```
-
-The consistency command uses the mathematical-abstractions checkout documented in [MathematicalModel.md](docs/specification/MathematicalModel.md); another location can be supplied with `--catalog-root`. Its [review](docs/specification/ConsistencyReview.md) and evidence are scoped finite analyses, separate from application-conformance and real terminal/model checks.
-
-See [Refactoring.md](docs/Refactoring.md) for the abstraction discovery and [Testing.md](docs/Testing.md) for the test audit and mathematical mappings.
-
-The stable entrypoint remains `diary_agent.py`. Follow [AGENTS.md](AGENTS.md), update contracts before implementation, and keep approved targets and implemented behavior visibly separate.
+Formal consistency and verification skills were used to curate the [specification](docs/Specification.md) and [verify the implementation](docs/conformance/ConformanceReview.md).
