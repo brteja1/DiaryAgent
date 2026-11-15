@@ -26,6 +26,8 @@ The specification distinguishes baseline behavior and approved targets. All twel
 
 ## Implementation status
 
+The approved contracts have regression and fault-injection coverage. The [conformance review](conformance/ConformanceReview.md) records repaired violations and remaining unchecked integration behavior; passing tests are not a universal conformance proof. All twelve recorded decisions are resolved in specification v1.0. The [specification](Specification.md) owns the exact targets and acceptance examples; the review records the tested scope and unverified terminal/model behavior.
+
 | Decision | Status at this documentation update |
 | --- | --- |
 | D-01: consent/verbatim saves | Save/consent paths implemented; tests cover original/proposal selection and exact persistence. |

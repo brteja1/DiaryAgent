@@ -2,26 +2,7 @@
 
 A local-first Python terminal diary with daily Markdown notes, persistent TODOs, section tags and local Ollama-assisted search. HTFS is a mandatory bundled dependency; LLM assistance is optional.
 
-[Specification](docs/Specification.md) is the authoritative behavior contract. [Requirements](docs/Requirements.md) indexes its features and implementation status. [Design](docs/Design.md) describes architecture; [AGENTS.md](AGENTS.md) provides contributor guidance. [Future](docs/Future.md) contains nonbinding proposals.
-
-## Implementation status
-
-The approved contracts have regression and fault-injection coverage. The [conformance review](docs/conformance/ConformanceReview.md) records repaired violations and remaining unchecked integration behavior; passing tests are not a universal conformance proof.
-
-| Area | Current status |
-| --- | --- |
-| Mandatory bundled HTFS (D-07) | Implemented, including startup validation and integration tests. |
-| TODO review (D-02) and five LLM tasks (D-03) | Current routing/task inventory agrees with the decisions. |
-| Consent and verbatim saves (D-01) | Implemented save/consent paths, with focused acceptance tests. |
-| Calendar navigation, identity guards and byte preservation (D-04–06) | Implemented using parsed dates, uniqueness guards and exact source spans. |
-| Recovery and tag cancellation (D-08–09) | Distinct selections, recorded intent, content-first writes, metadata retries and retained receipts are implemented. |
-| Documentation authority (D-10) | Applied in the documentation. |
-| TODO metadata (D-11) | Generated fields are validated; raw legacy/unvalidated fields are preserved and labeled in task views. |
-| Unattended/stale selection (D-12) | Read-only non-TTY listing, selection validation and snapshot guards implemented. |
-
-The authoritative specification records the exact targets, acceptance examples and remaining gaps.
-
-All twelve recorded decisions are resolved in specification v1.0. See the review for the exact tested scope and unverified terminal/model behavior.
+[Specification](docs/Specification.md) is the authoritative behavior contract. [Requirements](docs/Requirements.md) indexes its features and [implementation status](docs/Requirements.md#implementation-status). [Design](docs/Design.md) describes architecture; [AGENTS.md](AGENTS.md) provides contributor guidance. [Future](docs/Future.md) contains nonbinding proposals.
 
 ## Setup
 
