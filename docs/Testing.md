@@ -1,5 +1,7 @@
 # Behavior-focused test audit
 
+The original pruning/refactor audit below describes baseline `c6432d3`. The subsequent violation repairs add `tests/test_recovery.py` and the version 1.1 [conformance review](conformance/ConformanceReview.md), including intent failure, content-first deletion, partial/uncertain outcomes, metadata-only retry, receipts, divergence, taxonomy progress, real optional-package absence and generated/legacy metadata interpretation. Existing regression doubles for deletion, tagging and capture were replaced with actual temporary-backend outcomes where persistence now needs them.
+
 Tests are retained when they establish an observable clause of [Specification.md](Specification.md), a documented failure outcome, or preservation of user data. Implementation shape, wrapper existence, widget-constructor arguments and incidental call counts are not product requirements.
 
 The audit uses the external [mathematical-tests skill](/linuxdev/github/mathematical-abstractions/ai/skills/mathematical-tests/SKILL.md). Test docstrings name their specification IDs. Mathematical properties are selected from actual behavior; most CLI behavior needs a direct acceptance oracle rather than an algebraic law.
@@ -66,10 +68,4 @@ python3 scripts/specification/check_consistency.py --output docs/specification/e
 
 The automated suite passes 106 cases. A CLI smoke check with injected temporary configuration also passed capture, read-only TODO listing, hierarchical tag application and tag-only search against the bundled backend; the executable help path was checked separately. This is finite acceptance/regression evidence, not full specification conformance. The independent consistency checker constructs reference models and does not test production code.
 
-Still deferred:
-
-- PERSIST-01–05: intent journal, truthful partial/uncertain cross-store outcomes, metadata-only retries and replay receipts. Current cross-store success tests do not establish failure recovery or content-first deletion ordering.
-- TODO-08: structured validated/unvalidated metadata presentation and validation of newly generated fields. Raw text is preserved and open-task proposal date expansion uses `DD-MM-YYYY`; this is only part of D-11.
-- Live Ollama responses, actual nested-terminal rendering/thread execution, physical write failures and races after snapshot validation. UI tests replace terminal execution, and model tests use supplied responses.
-
-Add tests for those contracts with their implementations. Do not restore expectations contradicting consent/verbatim requirements, or add universal algebraic laws whose premises the software does not meet.
+Still unchecked after the repairs: live Ollama and physical nested-terminal behavior, arbitrary device/power failures, multi-process races after validation and universal refinement/progress claims. D-08 and D-11 were implemented in the subsequent repair; see the current conformance review and `tests/test_recovery.py` for their executed evidence. The older count and deferred-work descriptions above describe the original refactoring snapshot, not current pending implementation.

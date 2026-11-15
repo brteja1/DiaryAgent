@@ -1,5 +1,7 @@
 # Maintainability refactor
 
+Historical report for the refactor committed as `c6432d3`. Later recovery/metadata repairs and current evidence are in [ConformanceReview.md](conformance/ConformanceReview.md); pattern counts and pending-work notes below refer to that earlier snapshot.
+
 The cleanup applies the external [abstraction-discovery skill](/linuxdev/github/mathematical-abstractions/ai/skills/abstraction-discovery/SKILL.md), followed by [mathematical-tests](/linuxdev/github/mathematical-abstractions/ai/skills/mathematical-tests/SKILL.md). The baseline is commit `99a8ceb`. The dominant finding was structural duplication, rather than a missing algebraic class hierarchy.
 
 ## Scope and discovery

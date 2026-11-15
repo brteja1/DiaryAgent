@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .todo_metadata import PRIORITIES, field_status, parsed_due_date
+
 
 @dataclass(frozen=True)
 class PendingTask:
@@ -18,12 +20,22 @@ class PendingTask:
         return f"{self.file_path}:{self.line_number}"
 
     @property
+    def due_status(self) -> str:
+        return field_status(self.due, parsed_due_date(self.due) is not None)
+
+    @property
+    def priority_status(self) -> str:
+        return field_status(self.priority, self.priority in PRIORITIES)
+
+    @property
     def display_text(self) -> str:
         parts = [self.text]
-        if self.due:
-            parts.append(f"[due: {self.due}]")
-        if self.priority:
-            parts.append(f"[priority: {self.priority}]")
+        if self.due is not None:
+            suffix = " (unvalidated)" if self.due_status == "unvalidated" else ""
+            parts.append(f"[due: {self.due}]{suffix}")
+        if self.priority is not None:
+            suffix = " (unvalidated)" if self.priority_status == "unvalidated" else ""
+            parts.append(f"[priority: {self.priority}]{suffix}")
         return " ".join(parts)
 
 

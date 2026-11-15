@@ -10,6 +10,7 @@ from . import commands
 from .core import load_or_initialize_config
 from .service import DiaryAgent
 from .htfs_adapter import HTFSAdapter
+from .persistence import PersistenceInterrupted
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -151,6 +152,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the final confirmation prompt.",
     )
+    recovery_parser = subparsers.add_parser(
+        "recovery",
+        help="Inspect operations and retry metadata without replaying diary writes.",
+    )
+    recovery_commands = recovery_parser.add_subparsers(
+        dest="recovery_command", required=True
+    )
+    list_parser = recovery_commands.add_parser("list", help="List pending operations.")
+    list_parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="include_complete",
+        help="Include retained completion receipts.",
+    )
+    for action in ("show", "retry", "resolve"):
+        action_parser = recovery_commands.add_parser(action)
+        action_parser.add_argument("operation_id")
+        if action == "resolve":
+            action_parser.add_argument("--reason", required=True)
+            action_parser.add_argument("--yes", action="store_true")
     return parser
 
 
@@ -180,6 +201,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return commands.run_show_day(agent, day_text=args.day)
         if command == "todos":
             return commands.run_todos(agent)
+        if command == "recovery":
+            return commands.run_recovery(
+                agent,
+                args.recovery_command,
+                getattr(args, "operation_id", None),
+                include_complete=getattr(args, "include_complete", False),
+                reason=getattr(args, "reason", ""),
+                yes=getattr(args, "yes", False),
+            )
         if command == "tags":
             tags_command = args.tags_command
             if tags_command in {"ls", "list"}:
@@ -201,6 +231,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     yes=args.yes,
                 )
         parser.error(f"Unknown command: {command}")
+    except PersistenceInterrupted as exc:
+        print(f"Interrupted: {exc}", file=sys.stderr)
+        return 130
     except KeyboardInterrupt:
         print("\nAborted.")
         return 130

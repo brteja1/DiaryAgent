@@ -387,36 +387,22 @@ def test_section_for_id_returns_none_for_missing_section(tmp_path):
     assert agent.section_for_id("26_03_2026.md#14:30") is None
 
 
-def test_delete_section_removes_markdown_section_and_htfs_resource(
-    monkeypatch, tmp_path
-):
-    """VIEW-05/08/09 (success or missing target; D-08 recovery deferred): observable contract regression."""
-    file_path = tmp_path / "26_03_2026.md"
-    file_path.write_text(
-        "## 09:15\n\n" "- first note\n\n" "## 14:30\n\n" "- second note\n",
-        encoding="utf-8",
-    )
-    agent = DiaryAgent(diary_dir=tmp_path, model="test-model")
-    recorded = {}
-
-    class FakeAdapter:
-        def __init__(self, *_args, **_kwargs):
-            pass
-
-        def delete_section_resource(self, section):
-            recorded["deleted"] = section.section_id
-
-    monkeypatch.setattr(service, "HTFSAdapter", FakeAdapter)
-
-    updated = agent.delete_section(file_path, "09:15")
-
-    assert updated == "## 14:30\n\n- second note"
-    assert file_path.read_text(encoding="utf-8") == "## 14:30\n\n- second note\n"
-    assert recorded == {"deleted": "26_03_2026.md#09:15"}
+def test_delete_section_removes_markdown_section_and_htfs_resource(tmp_path):
+    """VIEW-05/08/09, PERSIST-01: actual content/resource deletion."""
+    path = tmp_path / "26_03_2026.md"
+    path.write_text("## 09:15\n\n- first note\n\n## 14:30\n\n- second note\n")
+    agent = DiaryAgent(tmp_path, None)
+    selected = agent.section_for_id(path.name + "#09:15")
+    agent.set_section_tags(selected, ["Old"])
+    assert agent.delete_section(path, "09:15") == "## 14:30\n\n- second note"
+    assert path.read_text() == "## 14:30\n\n- second note\n"
+    adapter = HTFSAdapter(tmp_path)
+    assert not adapter.section_resource_exists(selected)
+    assert "Old" in adapter.list_tags()
 
 
 def test_delete_section_returns_none_when_heading_is_missing(monkeypatch, tmp_path):
-    """VIEW-05/08/09 (success or missing target; D-08 recovery deferred): observable contract regression."""
+    """VIEW-05/08/09 (missing target; no mutation starts): observable contract regression."""
     file_path = tmp_path / "26_03_2026.md"
     original = "## 09:15\n\n- first note\n"
     file_path.write_text(original, encoding="utf-8")
@@ -518,47 +504,23 @@ def test_run_tags_show_prints_section_tags(monkeypatch, tmp_path, capsys):
     )
 
 
-def test_run_tags_apply_creates_and_applies_tags(monkeypatch, tmp_path, capsys):
-    """TAG-02–06: observable contract regression."""
-    agent = DiaryAgent(diary_dir=tmp_path, model="test-model")
-    section = models.DiarySection(tmp_path / "26_03_2026.md", "14:30", "- second note")
-    monkeypatch.setattr(commands, "resolve_section", lambda *_args: section)
-    recorded = {}
-
-    class FakeAdapter:
-        def add_tags(self, tags):
-            recorded["added"] = list(tags)
-            return []
-
-        def tag_section(self, section, tags):
-            recorded["section_id"] = section.section_id
-            recorded["tagged"] = list(tags)
-            return []
-
-        def get_top_level_tags(self):
-            return []
-
-        def get_all_tag_paths(self):
-            return []
-
-    monkeypatch.setattr(commands, "get_htfs_adapter", lambda *_args: FakeAdapter())
-
-    exit_code = commands.run_tags_apply(
-        agent,
-        "26_03_2026",
-        "14:30",
-        ["Project/DiaryAgent", "Topic/Retrieval"],
+def test_run_tags_apply_creates_and_applies_tags(tmp_path, capsys):
+    """TAG-04/05: hierarchical creation and additive section associations."""
+    path = tmp_path / "26_03_2026.md"
+    path.write_text("## 14:30\n\nA note\n")
+    agent = DiaryAgent(tmp_path, None)
+    section = agent.section_for_id(path.name + "#14:30")
+    agent.set_section_tags(section, ["Existing"])
+    assert (
+        commands.run_tags_apply(
+            agent, "26_03_2026", "14:30", ["Project/DiaryAgent", "Topic/Retrieval"]
+        )
+        == 0
     )
-
-    assert exit_code == 0
-    assert recorded == {
-        "added": ["Project/DiaryAgent", "Topic/Retrieval"],
-        "section_id": "26_03_2026.md#14:30",
-        "tagged": ["DiaryAgent", "Retrieval"],
-    }
-    assert capsys.readouterr().out == (
-        "Tagged 26_03_2026.md#14:30 with Project/DiaryAgent, Topic/Retrieval\n"
-    )
+    adapter = HTFSAdapter(tmp_path)
+    assert set(adapter.section_tags(section)) == {"Existing", "DiaryAgent", "Retrieval"}
+    assert {"Project/DiaryAgent", "Topic/Retrieval"} <= set(adapter.get_all_tag_paths())
+    assert section.section_id in capsys.readouterr().out
 
 
 def test_run_tags_suggest_uses_available_htfs_tags(monkeypatch, tmp_path, capsys):
@@ -660,50 +622,30 @@ def test_run_tags_tree_rejects_missing_root(monkeypatch, tmp_path, capsys):
     assert capsys.readouterr().out == "Tag not found: Missing\n"
 
 
-def test_run_tags_delete_recursively_deletes_descendants_first(
-    monkeypatch, tmp_path, capsys
-):
-    """TAG-02–06: observable contract regression."""
-    agent = DiaryAgent(diary_dir=tmp_path, model="test-model")
+def test_run_tags_delete_recursively_deletes_descendants_first(monkeypatch, tmp_path):
+    """TAG-06: destructive backend effects run child before parent."""
+    adapter = commands.get_htfs_adapter(tmp_path)
+    adapter.add_tags(["Alpha/Beta/Gamma"])
     deleted = []
-    checked = []
+    delete = HTFSAdapter.delete_tag
 
-    class FakeAdapter:
-        def list_tags(self):
-            return ["Project", "Project/Alpha", "Project/Alpha/Reports"]
+    def observe(self, name):
+        deleted.append(name)
+        return delete(self, name)
 
-        def get_tag_descendants(self, tag_name):
-            return (
-                ["Project/Alpha/Reports", "Project/Alpha"]
-                if tag_name == "Project"
-                else []
-            )
-
-        def tag_has_usage(self, tag_name):
-            checked.append(tag_name)
-            return False
-
-        def delete_tag(self, tag_name):
-            deleted.append(tag_name)
-            return True
-
-    monkeypatch.setattr(commands, "get_htfs_adapter", lambda *_args: FakeAdapter())
-
-    exit_code = commands.run_tags_delete(
-        agent,
-        "Project",
-        descendants=True,
-        only_unused=True,
-        yes=True,
-    )
-
-    assert exit_code == 0
-    assert checked == ["Project/Alpha/Reports", "Project/Alpha", "Project"]
-    assert deleted == ["Project/Alpha/Reports", "Project/Alpha", "Project"]
+    monkeypatch.setattr(HTFSAdapter, "delete_tag", observe)
     assert (
-        capsys.readouterr().out
-        == "Deleted 3 tag(s): Project/Alpha/Reports, Project/Alpha, Project\n"
+        commands.run_tags_delete(
+            DiaryAgent(tmp_path, None),
+            "Alpha",
+            descendants=True,
+            only_unused=False,
+            yes=True,
+        )
+        == 0
     )
+    assert deleted == ["Gamma", "Beta", "Alpha"]
+    assert not {"Alpha", "Beta", "Gamma"} & set(adapter.list_tags())
 
 
 def test_run_tags_delete_blocks_when_tags_are_used(monkeypatch, tmp_path, capsys):
@@ -783,85 +725,30 @@ def test_build_parser_accepts_tag_list_and_tree():
 def test_run_capture_interactive_prompts_for_tags_and_applies_them(
     monkeypatch, tmp_path
 ):
-    """CAP-07, TAG-03: observable contract regression."""
-    agent = DiaryAgent(diary_dir=tmp_path, model="test-model")
-    monkeypatch.setattr(agent, "ensure_storage", lambda: None)
-
-    def fake_launch_editor(
-        initial_text="",
-        state="Capturing update",
-        info_message=None,
-        rewrite=None,
-        suggest_tags=None,
-    ):
-        suggested = suggest_tags("- Final edited note") if suggest_tags else []
-        return "- Final edited note", suggested
-
-    monkeypatch.setattr(commands, "launch_editor", fake_launch_editor)
-    section = models.DiarySection(
-        tmp_path / "26_03_2026.md", "14:30", "- Final edited note"
-    )
-    monkeypatch.setattr(
-        agent,
-        "append_entry_verbatim",
-        lambda entry, day_text=None: (tmp_path / "26_03_2026.md", True),
-    )
-    monkeypatch.setattr(agent, "latest_section_for_file", lambda _path: section)
-    prompted = {}
-
+    """CAP-07, TAG-03: actual saved capture followed by explicit tagging."""
+    agent = DiaryAgent(tmp_path, "model")
+    adapter = commands.get_htfs_adapter(tmp_path)
+    adapter.add_tags(["Project/DiaryAgent", "Topic/Retrieval"])
     monkeypatch.setattr(
         agent, "suggest_tags_for_text", lambda text, all_tags: ["Topic/Retrieval"]
     )
 
-    def fake_prompt_for_section_tags(
-        all_tags, top_level_tags, all_paths, suggested_tags=[]
-    ):
-        prompted["all_tags"] = list(all_tags)
-        prompted["top_level"] = list(top_level_tags)
-        prompted["all_paths"] = list(all_paths)
-        prompted["suggested"] = list(suggested_tags)
+    def editor(**kwargs):
+        suggestions = kwargs["suggest_tags"]("Final note")
+        return "Final note", suggestions
+
+    def prompt(all_tags, top_level_tags, all_paths, suggested_tags=()):
+        assert "Project" in top_level_tags
+        assert "Project/DiaryAgent" in all_paths
+        assert suggested_tags == ["Topic/Retrieval"]
         return ["Project/DiaryAgent"]
 
-    monkeypatch.setattr(
-        commands, "prompt_for_section_tags", fake_prompt_for_section_tags
-    )
-    recorded = {}
-
-    class FakeAdapter:
-        def list_tags(self):
-            return ["Project/DiaryAgent", "Topic/Retrieval"]
-
-        def get_top_level_tags(self):
-            return ["Project", "Topic"]
-
-        def get_all_tag_paths(self):
-            return ["Project/DiaryAgent", "Topic/Retrieval"]
-
-        def add_tags(self, tags):
-            recorded["added"] = list(tags)
-            return []
-
-        def tag_section(self, applied_section, tags):
-            recorded["section_id"] = applied_section.section_id
-            recorded["tagged"] = list(tags)
-            return []
-
-    monkeypatch.setattr(commands, "get_htfs_adapter", lambda *_args: FakeAdapter())
-
-    exit_code = commands.run_capture(agent)
-
-    assert exit_code == 0
-    assert prompted == {
-        "all_tags": ["Project/DiaryAgent", "Topic/Retrieval"],
-        "top_level": ["Project", "Topic"],
-        "all_paths": ["Project/DiaryAgent", "Topic/Retrieval"],
-        "suggested": ["Topic/Retrieval"],
-    }
-    assert recorded == {
-        "added": ["Project/DiaryAgent"],
-        "section_id": "26_03_2026.md#14:30",
-        "tagged": ["DiaryAgent"],
-    }
+    monkeypatch.setattr(commands, "launch_editor", editor)
+    monkeypatch.setattr(commands, "prompt_for_section_tags", prompt)
+    assert commands.run_capture(agent, day_text="26_03_2026") == 0
+    section = agent.parse_day_sections(tmp_path / "26_03_2026.md")[0]
+    assert section.body == "Final note"
+    assert adapter.section_tags(section) == ["DiaryAgent"]
 
 
 def test_run_show_day_hides_llm_tag_suggestions_when_model_missing(

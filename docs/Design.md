@@ -12,6 +12,8 @@ This document describes the current implementation and the architectural changes
 | [`service.py`](../diary_agent_app/service.py) | `DiaryAgent`: storage, navigation, TODO and search operations; no terminal UI dependency. |
 | [`markdown.py`](../diary_agent_app/markdown.py) | One timestamp parser, immutable source spans, unique lookup and localized mutation. Reads/writes retain line endings. |
 | [`core.py`](../diary_agent_app/core.py) | Config I/O, date/TODO parsing, lexical scoring and shortlisting. |
+| [`persistence.py`](../diary_agent_app/persistence.py) | Intent journal, explicit outcomes, verified reconciliation and metadata-only retry. |
+| [`todo_metadata.py`](../diary_agent_app/todo_metadata.py) | Raw metadata validity interpretation without canonicalizing storage. |
 | [`models.py`](../diary_agent_app/models.py) | Shared immutable records; pending tasks carry their source snapshot. |
 | [`llm.py`](../diary_agent_app/llm.py) | Five task-specific prompts over one Ollama transport/error boundary. |
 | [`htfs_adapter.py`](../diary_agent_app/htfs_adapter.py) | The sole HTFS boundary; one context manager closes every backend session. |
@@ -49,19 +51,34 @@ Search scores section-body chunks and tags, optionally restricting section IDs t
 
 The five LLM operations are rewrite/TODO classification, TODO similarity, answer synthesis, explicit tag suggestions and natural-language filter translation. Rewrite cleanup strips generated headings and preserves useful nested bullets. Proposal cleanup happens before review; persistence does not repeat it.
 
-## Remaining implementation work
+## Persistence and recovery
 
-D-01 consent/verbatim paths, D-04 calendar selection, D-05 uniqueness guards, D-06 byte preservation, D-09 distinct selection outcomes and D-12 selection guards have focused acceptance coverage. D-09 metadata failures still require D-08 recovery. D-11 open-task proposal expansion now emits `DD-MM-YYYY` and leaves completed tasks alone; validated versus unvalidated metadata presentation is still pending.
+`persistence.py` owns `OperationJournal` and `DiaryPersistence`. The journal stores one JSON record per operation in `.diary-agent/operations/`, using a flushed temporary file and atomic replacement of the record. Its schema records:
 
-D-08 remains an architectural gap: there is no recovery journal or retry/receipt command, deletion still performs metadata cleanup before the content write, and tag replacement can partially fail after clearing old associations. Do not describe these operations as atomic or safely retryable. These gaps require a persistence-focused change with fault-injection acceptance tests.
+- Operation identity/kind/status, error and completion/resolution information.
+- Affected filenames with prior/intended UTF-8 content fingerprints and observed write states.
+- Section identities, prior/intended resource existence and tag sets, requested hierarchical specs, verified checkpoints and in-flight metadata steps.
+- For taxonomy deletion, affected resource associations and expected hierarchy changes, preserving child-before-parent order.
 
-## Recovery design boundary
+The coordinator records intent before a user-content/metadata mutation. Initial boundary initialization is mandatory startup setup, not a replay of a user operation. Content writes occur first and are observed as committed, not written or uncertain. Only confirmed desired content permits metadata reconciliation. A failed delete write leaves tag associations intact. Interrupted mutations carry their observed state and operation ID to the CLI while preserving status 130. A confirmed write followed by metadata/journal failure is reported as partial; a tag-only unverified mutation or uncertain content is reported as uncertain. No record claims successful completion until closed backend sessions and fresh observations verify the intended state, including requested hierarchical paths when leaf associations were already present.
 
-PERSIST-01–05 define the target. Journal schema/location and recovery CLI still need implementation. Records retain identities, expected/intended content fingerprints, prior/intended associations, and progress/errors; tags cannot be reconstructed from diary text alone.
+All application mutations use this boundary: capture append, section edit/delete, checkbox toggle/completion, additive/replacement tags and taxonomy deletion. Direct HTFS primitives remain in the adapter; setup and test fixtures may use them independently of a user operation. Batch TODO intent is recorded before the first file write; partial writes are not described as atomic.
 
-Combined changes commit Markdown before HTFS reconciliation. Post-save tagging is a separate metadata operation. Retry inspects current state, stops on divergence/ambiguity, and never reexecutes capture or content mutation. Verified completion retains a receipt preventing replay even after manual changes. Account for backend close/flush/readback before success.
+Recovery exposes `list`, `show`, `retry` and explicit `resolve` commands. Retry never calls a Markdown writer. It verifies content fingerprints, target uniqueness and expected prior/checkpoint/in-flight/intended associations before reconciling. Unknown external associations or new resource usage stop taxonomy retries. Unrelated taxonomy nodes are outside that deletion's comparison scope. Captured failure observations only authorize retry when they remain compatible with the operation's recorded tag domain; new foreign tags are not adopted as expected state.
 
-This is an approved architectural obligation, not an existing transaction mechanism. No atomicity across Markdown/SQLite/RDF, automatic rollback, arbitrary concurrent-edit protection or power-loss durability is asserted. Mandatory startup does not prevent later failures.
+A not-confirmed content change requires inspection, not automatic replay. A completed or explicitly resolved operation returns its retained receipt without applying metadata again, even if the user subsequently edits content or tags. Prior state remains in the record after completion. Resolution records a reason and does not modify content/tags.
+
+Capture acknowledges the saved note before post-save tagging. Rejected-tag lists and exceptions report pending tagging and an operation identity. A failure to prepare a separate tagging intent reports that tagging did not start, retaining the capture receipt. Viewer mutation failures reload available committed content and display the recovery diagnostic.
+
+This implements D-08's sequential recovery contract, not cross-store atomicity, rollback, physical durability, timeout guarantees or race isolation. A process crash can leave prepared/in-flight state requiring inspection; power-loss durability is not promised. Recovery record schema/commands are implementation choices under the approved policy.
+
+## Metadata interpretation and proposal boundaries
+
+`todo_metadata.py` recognizes exact-width valid Gregorian hyphen, ISO and underscore due fields; low/medium/high are the validated priority set. `PendingTask` retains raw `due`/`priority` strings and exposes `due_status`/`priority_status` as absent, validated or unvalidated. Displays annotate unvalidated fields. Checkbox edits splice only the state character, retaining all original bytes.
+
+Proposal preparation expands open-task relative references, then validates newly generated metadata using the original submitted fields as preservation context. Invalid new fields raise before proposal consent; the editor retains its draft and TTY text capture saves its original input with an explanation. Existing explicit/unknown field spellings are not canonicalized by persistence. The model prompt also requests this policy. Ordinary final saves never invoke this guard.
+
+The duplicate pipeline preserves checkbox state: completed history and regular notes cannot stand for an existing open task. Calendar rendering uses explicit four-digit years across the runtime-supported range.
 
 ## Verification and evolution
 

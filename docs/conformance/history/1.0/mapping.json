@@ -1,0 +1,1777 @@
+{
+  "schema_version": 1,
+  "version": "1.0",
+  "reviewed_implementation_revision": "c6432d34f86044ac2984b27600ab18a522b33f12",
+  "specification": "docs/Specification.md",
+  "specification_version": "1.0",
+  "specification_sha256": "b5df9651f89392f58cad73f621b8813a8a3833ad88c972221f03c35e80279c12",
+  "catalog_revision": "15bbc590a8c18289464cddaeef4ba5fdb323fc2a",
+  "catalog_source_sha256": {
+    "concepts/HoareTriple.md": "3bb69dea989349b7cd7b189a43464f10d20aef6a48eed3b1c86f08d887fc5e99",
+    "concepts/TransitionSystem.md": "ef94e179f22c87ae0e353b42070c51fe1c64c1840dc1f603184f5d18d18b9b26",
+    "concepts/TotalOrder.md": "0a869cf0ada52de382103235483d280191ca4dcef897aa18b2f28ce9b8257b57",
+    "concepts/OptionType.md": "e05b66c4c249423f2c4e87ca8a9c1fa47902872f7b478ed6d80a39203ff58dc2",
+    "concepts/EquivalenceRelation.md": "d2c7f7cb61aaab107d6cab200e07ff8a4fd6ee2bc50670991049bfb5b542421b",
+    "data/shared.json": "f3c72cc4d38e667202a6b3ae5ca17f23b43fec563c103e922c2e4b90f94dbe68"
+  },
+  "runtime_source_sha256": {
+    "diary_agent.py": "c113fc9376bbd00c714841b398dde2b8a60712879872d6a5762f90b545af5cfa",
+    "diary_agent_app/__init__.py": "62842899d354e45eb9fe18aa91d436fdb1502a9818397a4d2213b3fd251143b6",
+    "diary_agent_app/cli.py": "051a1d79fc272e81422a6285d4a1237a94615bc5b7f7366ec27d0b47533cf1ce",
+    "diary_agent_app/commands.py": "3906e60992ae9c5655b59e1921fca69f60ac71ae85af6b1153ce1f75948e8f11",
+    "diary_agent_app/core.py": "0e62722f6ba181c99f1d1ba930d0f3ff431e0d85cabda28c3903bd886318d9c3",
+    "diary_agent_app/htfs_adapter.py": "64b1146781a37161df55ff2a9c408750fc76c26d0fc0d522b730387f52fa11b7",
+    "diary_agent_app/llm.py": "969ffa3aedd07a93b83cdbbf0627c417a239b2624dd8d47682095d3c15d5e9d9",
+    "diary_agent_app/markdown.py": "fc73eaa0f0d3cc97faa305997b3d5aca18992f9d0d76de19fb064b4c9836b411",
+    "diary_agent_app/models.py": "ec69ab631749236ce7902fbe8b83d8456fbb59668da8f5d6788a7a9091d77af5",
+    "diary_agent_app/service.py": "dedda27b6669df000b7349c7251a23aca721ccf3d73cebed494c0dad37750373",
+    "diary_agent_app/ui.py": "6a71620ebc457bc17d5d35a62610aa4b16c4b37534f80326800348e3442fc8d0",
+    "diary_agent_app/viewer.py": "7d58cd982915c6906374cf606fe9eb185b31203cce0e93dc0c14e8fc2d1ceaac"
+  },
+  "profiles": {
+    "direct-contract": {
+      "catalog": [],
+      "representation": "No mathematical law added; product clause directly supplies the contract."
+    },
+    "store": {
+      "catalog": [
+        "concept/HoareTriple",
+        "operation/HoareTriple-basis-holds"
+      ],
+      "representation": "Concrete UTF-8 file bytes abstract to the same finite byte sequence. Body is an exact supplied substring; generated framing is separate. Successful span updates preserve prefix/suffix; missing/ambiguous targets have explicit no-write outcomes. Partial correctness does not promise successful I/O, termination, or durability."
+    },
+    "identity": {
+      "catalog": [
+        "concept/HoareTriple",
+        "operation/HoareTriple-basis-holds"
+      ],
+      "representation": "File+heading describes a lookup key; abstraction maps it to zero/one/multiple source occurrences. No global uniqueness invariant for external files. Partial unique lookup yields missing, one occurrence or ambiguous error; writes require exactly one. Source ranges retain Unicode text offsets whose UTF-8 encoding observes outside byte equality."
+    },
+    "calendar": {
+      "catalog": [
+        "concept/TotalOrder",
+        "operation/TotalOrder-basis-le",
+        "axiom/TotalOrder-transitive"
+      ],
+      "representation": "Carrier is supported Gregorian date, years 1..9999. Python date comparison/equality models le; filenames are rendered observations, not lexical order keys. Relative integer parsing may fail on overflow but cannot reject/change representation of an otherwise supported date. Previous/next return optional neighbor, not a synthetic sentinel date."
+    },
+    "selection": {
+      "catalog": [
+        "concept/OptionType",
+        "operation/option-none",
+        "operation/OptionType-some",
+        "operation/option-case",
+        "axiom/option-case-none",
+        "axiom/option-case-some"
+      ],
+      "representation": "None = cancelled; every list, including [], = accepted payload. Case analysis chooses prior associations or the intended backend tag set. Equality of persisted tags is set equality over HTFS leaf identities; list/order/path spelling is not tag-set equality. Successful equations exclude failure effects, which PERSIST separately specifies."
+    },
+    "editor": {
+      "catalog": [
+        "concept/TransitionSystem",
+        "operation/TransitionSystem-post"
+      ],
+      "representation": "State abstraction: busy=>working; original_draft!=None=>reviewing, with original as abstract draft and current buffer as displayed proposal; otherwise editing, with current buffer as draft. Submit closes. Constructor starts editing with no proposal. Only accepted proposal changes abstract draft; model errors/rejection retain it. Transitions include toolkit dispatch filters, not handlers in isolation. No fairness or eventual model completion assumed."
+    },
+    "tasks": {
+      "catalog": [
+        "concept/HoareTriple",
+        "operation/HoareTriple-basis-holds"
+      ],
+      "representation": "Scan constructs immutable location/raw-source-snapshot task observations. State is affected file byte map; task key path:line is a location, not durable identity. Completion validates every snapshot/raw open checkbox before changes; only state character mutates. After-validation races and multi-file atomicity are not promised. Validity of due/priority is an additional required observation, currently absent."
+    },
+    "key-equivalence": {
+      "catalog": [
+        "concept/EquivalenceRelation",
+        "operation/EquivalenceRelation-basis-class",
+        "axiom/equivalence-transitive"
+      ],
+      "representation": "Normalize task text excluding due/priority, then compare exact normalized keys. class(a) is represented implicitly by the set of candidate/open-history texts sharing a key; there is no explicit public equivalence-class API. No transitive-class interpretation is assigned to lexical near-matching or model similarity. Completed history must not be an open-task carrier."
+    },
+    "outcomes": {
+      "catalog": [
+        "concept/HoareTriple",
+        "operation/HoareTriple-basis-holds"
+      ],
+      "representation": "Concrete observation includes returned status/exception, stdout/stderr, Markdown bytes, backend associations and durable intent/receipt state. Abstract outcomes are complete, failed/no confirmed change, partial and uncertain. A generic exception after a confirmed write cannot abstract to unchanged failure. Journal/receipt representation is unresolved implementation design, not an unresolved product policy."
+    },
+    "config": {
+      "catalog": [],
+      "representation": "Constructor parses raw config into AppConfig(Path, Optional[str]); DiaryAgent normalizes blank model to None. Equality observes effective directory/model/backend origin, not dataclass field layout. File/prompt errors are operational failures; non-TTY must not prompt."
+    },
+    "backend": {
+      "catalog": [],
+      "representation": "Pinned HTFS source and per-diary boundary own SQLite/RDF and hierarchy. Adapter owns clients and close. Initialization establishes usable boundary by preflight inventory read, not merely database-file existence. No atomicity across content and metadata or proof of backend correctness is imported."
+    },
+    "model": {
+      "catalog": [],
+      "representation": "Environment supplies optional nondeterministic response or failure. Configured model, explicit invocation, availability and accepted content are separate observations. Prompts constrain requested behavior; model facts, termination and every possible response are not guaranteed. Allowlist has five tasks only."
+    },
+    "search": {
+      "catalog": [],
+      "representation": "Finite local result list of path/section/snippet/score/tag observations. Ordered score ranking is product-specific; equal-score tie order is unspecified. Tag restriction is set membership over unique section IDs; no match is an ordinary empty result. Search body has no content/tag mutation, while startup may initialize metadata by DEP-02."
+    }
+  },
+  "obligations": [
+    {
+      "id": "O-DOC-01",
+      "clause": "DOC-01",
+      "specification_locator": "docs/Specification.md:20",
+      "symbols": [
+        "docs/Specification.md",
+        "docs/Requirements.md",
+        "docs/Design.md",
+        "AGENTS.md",
+        "README.md"
+      ],
+      "catalog_profile": "direct-contract",
+      "representation": "direct-contract",
+      "admissible_inputs": "Documentation changes under direct user authority.",
+      "allowed_outcomes": "Specification owns behavior; other documents summarize without override.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DOC-02",
+      "clause": "DOC-02",
+      "specification_locator": "docs/Specification.md:21",
+      "symbols": [
+        "docs/Specification.md",
+        "docs/Testing.md",
+        "docs/Design.md"
+      ],
+      "catalog_profile": "direct-contract",
+      "representation": "direct-contract",
+      "admissible_inputs": "Current implementation-status statements and historical evidence.",
+      "allowed_outcomes": "Explicitly distinguish target/current/nonbinding/historical statements.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "violated",
+      "scope": "Static documentation defect: the unqualified paragraph after VIEW-09 still says edits/deletion reconstruct whole files, contradicting current code and section 10. Prior reports are historical snapshots."
+    },
+    {
+      "id": "O-DATA-01",
+      "clause": "DATA-01",
+      "specification_locator": "docs/Specification.md:56",
+      "symbols": [
+        "service.DiaryAgent.ensure_storage",
+        "service.DiaryAgent.day_file",
+        "service.DiaryAgent._append_body"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "Configured writable root, UTF-8-encodable text and supported diary dates.",
+      "allowed_outcomes": "Create root and write only correctly named dd_mm_yyyy.md daily files.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_append_entry_appends_to_existing_daily_file"
+      ],
+      "probes": [
+        "P07-relative-year-one"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-02",
+      "clause": "DATA-02",
+      "specification_locator": "docs/Specification.md:57",
+      "symbols": [
+        "service.DiaryAgent._append_body",
+        "service.DiaryAgent.unique_entry_timestamp_heading"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "Nonempty accepted body; empty/whitespace-only is a no-change input.",
+      "allowed_outcomes": "Append exact body inside fresh time framing; preserve prior identities; serials increase.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_append_entry_verbatim_uses_serial_suffix_for_same_minute",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-03",
+      "clause": "DATA-03",
+      "specification_locator": "docs/Specification.md:58",
+      "symbols": [
+        "markdown.section_heading",
+        "markdown.DiaryDocument.parse",
+        "models.DiarySection.section_id"
+      ],
+      "catalog_profile": "identity",
+      "representation": "identity",
+      "admissible_inputs": "Arbitrary external UTF-8 Markdown, including preambles and repeated reserved delimiters.",
+      "allowed_outcomes": "Every recognized timestamp-shaped line delimits a section; no silent renaming; ID derives filename and heading.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_parse_day_sections_returns_timestamp_sections_with_stable_ids",
+        "test_parse_day_sections_supports_serialized_timestamp_headings",
+        "test_parse_day_sections_ignores_text_before_first_timestamp_heading"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-04",
+      "clause": "DATA-04",
+      "specification_locator": "docs/Specification.md:59",
+      "symbols": [
+        "core.parse_explicit_day_input",
+        "service.DiaryAgent.file_for_day_input"
+      ],
+      "catalog_profile": "calendar",
+      "representation": "calendar",
+      "admissible_inputs": "Strict valid dd_mm_yyyy or signed relative integer; target must be representable.",
+      "allowed_outcomes": "Resolve supported dates to canonical day input; invalid/overflow inputs are explicit errors.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_invalid_day_is_rejected",
+        "test_parse_explicit_day_input_accepts_relative_days"
+      ],
+      "probes": [
+        "P07-relative-year-one"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-05",
+      "clause": "DATA-05",
+      "specification_locator": "docs/Specification.md:60",
+      "symbols": [
+        "service.DiaryAgent.day_file",
+        "core.todo_reference_date",
+        "service.DiaryAgent.unique_entry_timestamp_heading"
+      ],
+      "catalog_profile": "calendar",
+      "representation": "calendar",
+      "admissible_inputs": "Omitted day or valid explicit/relative target.",
+      "allowed_outcomes": "Default local today; target drives file/context/TODO dates; local clock drives heading.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_backfilled_rewrite_uses_target_day_context",
+        "test_append_entry_appends_to_existing_daily_file"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static composition plus one explicit backfilled-context trace. Midnight rollover during a single workflow is not independently checked."
+    },
+    {
+      "id": "O-DATA-06",
+      "clause": "DATA-06",
+      "specification_locator": "docs/Specification.md:61",
+      "symbols": [
+        "service.DiaryAgent.diary_files",
+        "service.DiaryAgent.dated_diary_files",
+        "service.DiaryAgent.scan_pending_tasks",
+        "service.DiaryAgent.search"
+      ],
+      "catalog_profile": "calendar",
+      "representation": "calendar",
+      "admissible_inputs": "Immediate Markdown inventory may include invalid filenames and nested directories.",
+      "allowed_outcomes": "History scans retain immediate files; navigation filters to valid calendar-date names without rewriting anything.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_navigation_orders_calendar_dates_and_excludes_invalid_files",
+        "test_scan_pending_tasks_reads_unchecked_todos_from_all_markdown_files"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-07",
+      "clause": "DATA-07",
+      "specification_locator": "docs/Specification.md:81",
+      "symbols": [
+        "markdown.section_heading",
+        "markdown.DiaryDocument.parse",
+        "models.DiarySection.section_id"
+      ],
+      "catalog_profile": "identity",
+      "representation": "identity",
+      "admissible_inputs": "Arbitrary external UTF-8 Markdown, including preambles and repeated reserved delimiters.",
+      "allowed_outcomes": "Every recognized timestamp-shaped line delimits a section; no silent renaming; ID derives filename and heading.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_parse_day_sections_returns_timestamp_sections_with_stable_ids",
+        "test_parse_day_sections_supports_serialized_timestamp_headings",
+        "test_parse_day_sections_ignores_text_before_first_timestamp_heading"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-08",
+      "clause": "DATA-08",
+      "specification_locator": "docs/Specification.md:82",
+      "symbols": [
+        "markdown.DiaryDocument.unique_section",
+        "service.DiaryAgent.section_for_id",
+        "service.DiaryAgent.set_section_tags",
+        "viewer.show_diary_entry"
+      ],
+      "catalog_profile": "identity",
+      "representation": "identity",
+      "admissible_inputs": "Zero, one or multiple occurrences of a requested filename/heading ID.",
+      "allowed_outcomes": "Missing differs from ambiguous; raw viewing allowed; ambiguous section mutations do not write.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_duplicate_section_identity_blocks_mutations",
+        "test_section_for_id_returns_none_for_missing_section"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Domain guards tested; raw viewer diagnostics for duplicate IDs are inspected but terminal presentation is unchecked. Post-capture identity under submitted delimiters is U03."
+    },
+    {
+      "id": "O-DATA-09",
+      "clause": "DATA-09",
+      "specification_locator": "docs/Specification.md:83",
+      "symbols": [
+        "models.DiarySection.section_id",
+        "htfs_adapter.HTFSAdapter.resource_path_for_section"
+      ],
+      "catalog_profile": "identity",
+      "representation": "identity",
+      "admissible_inputs": "External file/heading rename.",
+      "allowed_outcomes": "New identity; no implicit metadata transfer or content repair.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static derivation/no migration code; externally renamed HTFS metadata behavior has no dedicated executed trace."
+    },
+    {
+      "id": "O-CLI-01",
+      "clause": "CLI-01",
+      "specification_locator": "docs/Specification.md:87",
+      "symbols": [
+        "diary_agent.py",
+        "cli.build_parser",
+        "cli.main"
+      ],
+      "catalog_profile": "direct-contract",
+      "representation": "direct-contract",
+      "admissible_inputs": "Documented argument grammar and global model override before subcommand.",
+      "allowed_outcomes": "Stable entrypoint/default capture; parsed inputs route to intended workflow.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_build_parser_accepts_capture_day",
+        "test_build_parser_accepts_show_without_day",
+        "test_build_parser_accepts_tag_list_and_tree"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CLI-02",
+      "clause": "CLI-02",
+      "specification_locator": "docs/Specification.md:104",
+      "symbols": [
+        "cli.main"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Successful/no-result, operational error, argparse usage error or handled interruption.",
+      "allowed_outcomes": "Statuses 0/1/2/130 respectively; exact wording unspecified.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_cli_requires_bundled_htfs_before_loading_config",
+        "test_cli_htfs_initialization_failure_prevents_capture"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static exception/dispatch boundary and preflight failure tests. Broad defensive exceptions can hide partial persistence (P04/P05); no exhaustive exit-code trace for every command."
+    },
+    {
+      "id": "O-CFG-01",
+      "clause": "CFG-01",
+      "specification_locator": "docs/Specification.md:108",
+      "symbols": [
+        "core.parse_config_text",
+        "core.config_file_path",
+        "core.load_or_initialize_config"
+      ],
+      "catalog_profile": "config",
+      "representation": "config",
+      "admissible_inputs": "Default home config or missing/incomplete file; key=value lines and expandable paths.",
+      "allowed_outcomes": "Ignore blank/comment/malformed lines; expand diary path; unknown legacy backend entry cannot redirect HTFS.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_parse_config_text_ignores_comments_and_invalid_lines",
+        "test_load_or_initialize_config_reads_required_entries"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CFG-02",
+      "clause": "CFG-02",
+      "specification_locator": "docs/Specification.md:109",
+      "symbols": [
+        "core.default_htfs_path",
+        "core.load_or_initialize_config",
+        "service.DiaryAgent.__init__"
+      ],
+      "catalog_profile": "config",
+      "representation": "config",
+      "admissible_inputs": "Required nonempty diary_path; optional blank/absent model; legacy override inputs.",
+      "allowed_outcomes": "No invented model/backend; bundled dependency only.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_load_or_initialize_config_allows_missing_llm_model",
+        "test_load_config_ignores_legacy_htfs_path",
+        "test_bundled_htfs_path_ignores_environment_and_home"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CFG-03",
+      "clause": "CFG-03",
+      "specification_locator": "docs/Specification.md:110",
+      "symbols": [
+        "core.prompt_for_config_entries",
+        "core.write_config"
+      ],
+      "catalog_profile": "config",
+      "representation": "config",
+      "admissible_inputs": "Missing/incomplete config, interactive or noninteractive stdin.",
+      "allowed_outcomes": "TTY can prompt/write config; non-TTY reports error.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_load_or_initialize_config_non_interactive_missing_required_values_raises",
+        "test_write_config_needs_only_diary_path_and_optional_model"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Non-TTY rejection and serialization tests; full actual terminal configuration prompting is unchecked."
+    },
+    {
+      "id": "O-CFG-04",
+      "clause": "CFG-04",
+      "specification_locator": "docs/Specification.md:111",
+      "symbols": [
+        "cli.main",
+        "service.DiaryAgent.llm_enabled"
+      ],
+      "catalog_profile": "config",
+      "representation": "config",
+      "admissible_inputs": "Optional CLI/config model values and required HTFS available.",
+      "allowed_outcomes": "CLI override wins; missing model permits deterministic workflows.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Constructor/selection inspected; no-model deterministic tests use installed prompt_toolkit. Optional-package absence is a separate violation under CAP-08/VIEW-02."
+    },
+    {
+      "id": "O-DEP-01",
+      "clause": "DEP-01",
+      "specification_locator": "docs/Specification.md:121",
+      "symbols": [
+        "core.default_htfs_path",
+        "htfs_adapter.HTFSAdapter.require_backend",
+        "htfs_adapter.HTFSAdapter.ensure_initialized",
+        "cli.main",
+        ".gitmodules",
+        "requirements.txt"
+      ],
+      "catalog_profile": "backend",
+      "representation": "backend",
+      "admissible_inputs": "Pinned bundled source/dependencies and configured metadata boundary.",
+      "allowed_outcomes": "Use only adapter/Python API; preflight before workflows; metadata belongs to diary boundary.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_bundled_htfs_path_ignores_environment_and_home",
+        "test_adapter_rejects_preloaded_external_htfs",
+        "test_bundled_htfs_resource_tagging_survives_reopening"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DEP-02",
+      "clause": "DEP-02",
+      "specification_locator": "docs/Specification.md:122",
+      "symbols": [
+        "cli.main",
+        "commands.get_htfs_adapter"
+      ],
+      "catalog_profile": "backend",
+      "representation": "backend",
+      "admissible_inputs": "Help/usage or operational command; backend absent/unavailable/corrupt.",
+      "allowed_outcomes": "Help avoids preflight; operational failure prevents workflow/content write; later errors do not become untagged success.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_cli_requires_bundled_htfs_before_loading_config",
+        "test_cli_htfs_initialization_failure_prevents_capture",
+        "test_search_does_not_hide_htfs_read_failures",
+        "test_show_does_not_mask_runtime_errors_as_ui_fallback"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Operational preflight and later read errors tested; post-write error reporting remains separately violated under PERSIST-03. Optional UI import failure prevents help without that package (F01)."
+    },
+    {
+      "id": "O-LLM-01",
+      "clause": "LLM-01",
+      "specification_locator": "docs/Specification.md:124",
+      "symbols": [
+        "llm._chat",
+        "llm.synthesize_entry",
+        "llm.todos_are_semantically_similar",
+        "llm.answer_query",
+        "llm.suggest_section_tags",
+        "llm.tag_expression_from_natural_language",
+        "service.DiaryAgent.llm_enabled"
+      ],
+      "catalog_profile": "model",
+      "representation": "model",
+      "admissible_inputs": "Configured model and enabled workflow invoking one of the five allowed tasks.",
+      "allowed_outcomes": "No other task, automatic suggestion/application or unconfigured model call.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_run_show_day_hides_llm_tag_suggestions_when_model_missing",
+        "test_run_tags_suggest_uses_available_htfs_tags"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "All model call sites statically inventoried and selected callbacks tested. Real model behavior/service completion is unchecked."
+    },
+    {
+      "id": "O-CAP-01",
+      "clause": "CAP-01",
+      "specification_locator": "docs/Specification.md:132",
+      "symbols": [
+        "ui.launch_editor",
+        "service.DiaryAgent._append_body"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "User text and submit event; background/review state can block submit.",
+      "allowed_outcomes": "One multiline editor; submit final nonempty body; whitespace-only saves nothing.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_editor_reviews_rewrite_before_draft_replacement",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-02",
+      "clause": "CAP-02",
+      "specification_locator": "docs/Specification.md:133",
+      "symbols": [
+        "commands._capture_in_editor",
+        "ui.launch_editor"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Explicit Alt+R with configured model; submission without rewrite; unconfigured model.",
+      "allowed_outcomes": "Only explicit editor rewrite request generates proposal; model absence hides rewrite callback.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-03",
+      "clause": "CAP-03",
+      "specification_locator": "docs/Specification.md:134",
+      "symbols": [
+        "commands._capture_in_editor",
+        "service.DiaryAgent.prepare_rewrite_for_review",
+        "llm.synthesize_entry",
+        "llm.strip_generated_headings"
+      ],
+      "catalog_profile": "model",
+      "representation": "model",
+      "admissible_inputs": "Explicit new-draft rewrite against the selected day.",
+      "allowed_outcomes": "Prompt preserves facts/useful hierarchy, uses history only as context, strips generated headings and filters proposal redundancy.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_backfilled_rewrite_uses_target_day_context",
+        "test_synthesize_entry_strips_headings_and_preserves_nested_bullets"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Prompt/cleanup contract inspected and finite outputs tested; no claim that a nondeterministic model preserves every fact. Completed/open comparison distinction is violated under TODO-04."
+    },
+    {
+      "id": "O-CAP-04",
+      "clause": "CAP-04",
+      "specification_locator": "docs/Specification.md:135",
+      "symbols": [
+        "ui.EditorState",
+        "ui._start_editor_action",
+        "ui.launch_editor"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Editing, rewriting, reviewing, accepting/rejecting or failing; callbacks complete arbitrarily.",
+      "allowed_outcomes": "One operation at a time; lock and block submit; expose complete proposal; explicit consent before draft replacement; failure/reject retains draft.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "probes": [
+        "P09-inherited-submit-filter"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Finite controlled work/success/error/accept/reject traces plus actual inherited-key filter. Live scheduling/rendering and arbitrary completion interleavings remain unchecked."
+    },
+    {
+      "id": "O-CAP-05",
+      "clause": "CAP-05",
+      "specification_locator": "docs/Specification.md:136",
+      "symbols": [
+        "ui._start_editor_action",
+        "ui.launch_editor",
+        "commands._capture_in_editor"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Explicit Alt+S while enabled and not busy/reviewing.",
+      "allowed_outcomes": "Suggest existing tags only, no metadata mutation; retain draft on error and block overlap/submit.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "unchecked",
+      "scope": "Callback effects and shared lock lifecycle inspected; success/failure/overlap suggestion traces not independently executed."
+    },
+    {
+      "id": "O-CAP-06",
+      "clause": "CAP-06",
+      "specification_locator": "docs/Specification.md:137",
+      "symbols": [
+        "commands._capture_text",
+        "commands._capture_in_editor",
+        "service.DiaryAgent.append_entry_verbatim",
+        "service.DiaryAgent._append_body",
+        "service.DiaryAgent.update_section"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "Final user-controlled body; original input absent an accepted changed LLM proposal.",
+      "allowed_outcomes": "Exact body equality, allowing only generated framing outside the body.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates",
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "probes": [
+        "P11-exact-save-and-spans"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-13",
+      "clause": "CAP-13",
+      "specification_locator": "docs/Specification.md:138",
+      "symbols": [
+        "commands._capture_text",
+        "ui.launch_editor",
+        "service.DiaryAgent.prepare_rewrite_for_review"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Specific displayed changed proposal with/without consent, or whole-capture cancellation.",
+      "allowed_outcomes": "All cleanup before consent; no hidden post-accept/save transformation; decline/no consent retains original; whole cancellation writes nothing.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_text_capture_consent_is_specific_to_displayed_proposal",
+        "test_failed_text_rewrite_retains_original",
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Normal successful/RuntimeError callbacks and controlled cancellation/rejection. Arbitrary non-RuntimeError model/normalization failures and physical terminal cancellation remain unchecked."
+    },
+    {
+      "id": "O-CAP-07",
+      "clause": "CAP-07",
+      "specification_locator": "docs/Specification.md:139",
+      "symbols": [
+        "commands._capture_in_editor"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Successful editor save followed by skip/cancel/accept/failure in tagging.",
+      "allowed_outcomes": "Persist before tag prompt; no automatic suggestion; skip/cancel tagging retains the saved note. Post-save failure reporting is assessed separately under PERSIST-03.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_capture_interactive_prompts_for_tags_and_applies_them"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Successful prompt/order/cancellation inspected and tested. Multiple timestamp delimiters in one capture leave post-tag target interpretation U03; failure reporting is separately violated under PERSIST-03."
+    },
+    {
+      "id": "O-CAP-08",
+      "clause": "CAP-08",
+      "specification_locator": "docs/Specification.md:140",
+      "symbols": [
+        "ui.launch_editor",
+        "viewer.py"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Optional prompt_toolkit package absent.",
+      "allowed_outcomes": "Collect lines until blank/EOF and persist through verbatim capture; no editor hotkeys.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [
+        "P01-optional-ui-import"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-09",
+      "clause": "CAP-09",
+      "specification_locator": "docs/Specification.md:146",
+      "symbols": [
+        "commands._capture_text"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "--text may be empty/nonempty; no editor/tag dialog.",
+      "allowed_outcomes": "Empty is no-change; no editor or post-save tagging.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Text workflow contains no UI editor/tag call; empty accepted proposal tested. All-whitespace original text observed only by inspection."
+    },
+    {
+      "id": "O-CAP-10",
+      "clause": "CAP-10",
+      "specification_locator": "docs/Specification.md:147",
+      "symbols": [
+        "commands._capture_text",
+        "commands._capture_in_editor",
+        "service.DiaryAgent.append_entry_verbatim",
+        "service.DiaryAgent._append_body",
+        "service.DiaryAgent.update_section"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "Final user-controlled body; original input absent an accepted changed LLM proposal.",
+      "allowed_outcomes": "Exact body equality, allowing only generated framing outside the body.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates",
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "probes": [
+        "P11-exact-save-and-spans"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-11",
+      "clause": "CAP-11",
+      "specification_locator": "docs/Specification.md:148",
+      "symbols": [
+        "core.normalize_todo_text",
+        "core.lines_are_redundant",
+        "service.DiaryAgent.filter_new_entry_lines",
+        "commands._capture_text"
+      ],
+      "catalog_profile": "key-equivalence",
+      "representation": "key-equivalence",
+      "admissible_inputs": "Candidate comparison against day/history; heuristic near-match differs from normalized-key equality.",
+      "allowed_outcomes": "Advisory/accepted-proposal-only filtering; no semantic equivalence claim and no unconsented deletion.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates",
+        "test_todo_proposal_removes_existing_and_new_duplicate_open_todos"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-12",
+      "clause": "CAP-12",
+      "specification_locator": "docs/Specification.md:149",
+      "symbols": [
+        "commands._capture_text"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Accepted empty proposal, original nonempty without consent, accepted omitted similar tasks.",
+      "allowed_outcomes": "No append for accepted empty; preserve original otherwise; report accepted similar omissions with source location.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Empty/rejected proposal tested and accepted similar-task report inspected. No end-to-end semantic-omission report trace was executed."
+    },
+    {
+      "id": "O-TODO-01",
+      "clause": "TODO-01",
+      "specification_locator": "docs/Specification.md:167",
+      "symbols": [
+        "core.TODO_RE",
+        "core.todo_with_state",
+        "service.DiaryAgent.scan_pending_tasks",
+        "service.DiaryAgent.mark_tasks_complete",
+        "service.DiaryAgent.toggle_todo"
+      ],
+      "catalog_profile": "tasks",
+      "representation": "tasks",
+      "admissible_inputs": "Indented open/x/X checkboxes with optional raw due/priority; immediate Markdown files.",
+      "allowed_outcomes": "Discover open tasks and change only selected checkbox state, retaining metadata/indentation/other bytes.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_scan_pending_tasks_reads_unchecked_todos_from_all_markdown_files",
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-02",
+      "clause": "TODO-02",
+      "specification_locator": "docs/Specification.md:168",
+      "symbols": [
+        "core.normalize_todo_dates",
+        "core.expand_todo_date_references",
+        "service.DiaryAgent.prepare_rewrite_for_review"
+      ],
+      "catalog_profile": "calendar",
+      "representation": "calendar",
+      "admissible_inputs": "Open checkbox during LLM proposal preparation; target date; completed checkboxes and explicit legacy dates.",
+      "allowed_outcomes": "Expand recognized relative words only on open tasks, DD-MM-YYYY; final saves/edits retain submitted text.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_only_proposed_open_todos_expand_dates",
+        "test_unattended_capture_preserves_exact_input_and_duplicates"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Ordinary date inputs tested; date.max overflow and metadata validity remain separate TODO-08 obligations."
+    },
+    {
+      "id": "O-TODO-03",
+      "clause": "TODO-03",
+      "specification_locator": "docs/Specification.md:169",
+      "symbols": [
+        "commands.run_todos",
+        "ui.select_pending_tasks",
+        "service.DiaryAgent.mark_tasks_complete"
+      ],
+      "catalog_profile": "tasks",
+      "representation": "tasks",
+      "admissible_inputs": "Displayed scanned tasks, numeric/checklist selections including duplicates, empty and invalid indices.",
+      "allowed_outcomes": "Display task/source metadata; validate whole batch; empty no-change; duplicates denote one task.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_invalid_todo_selection_rejects_entire_batch",
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Numeric invalid/batch paths and duplicate completion tested; live interactive checklist selection is unchecked."
+    },
+    {
+      "id": "O-TODO-04",
+      "clause": "TODO-04",
+      "specification_locator": "docs/Specification.md:170",
+      "symbols": [
+        "service.DiaryAgent.open_todo_keys",
+        "service.DiaryAgent.dedupe_entry",
+        "service.DiaryAgent.prepare_rewrite_for_review",
+        "service.DiaryAgent.filter_new_entry_lines"
+      ],
+      "catalog_profile": "key-equivalence",
+      "representation": "key-equivalence",
+      "admissible_inputs": "Candidate open task; existing open versus completed history; optional metadata.",
+      "allowed_outcomes": "Only existing open tasks count as duplicate tasks; normalized task keys ignore metadata; removal requires accepted LLM proposal.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_todo_proposal_ignores_optional_todo_metadata",
+        "test_todo_proposal_removes_existing_and_new_duplicate_open_todos"
+      ],
+      "probes": [
+        "P08-completed-todo-history"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-05",
+      "clause": "TODO-05",
+      "specification_locator": "docs/Specification.md:171",
+      "symbols": [
+        "service.DiaryAgent.review_entry_todos",
+        "service.DiaryAgent.find_similar_open_todo",
+        "commands._capture_text"
+      ],
+      "catalog_profile": "model",
+      "representation": "model",
+      "admissible_inputs": "Similarity review flags unresolved task and proposal differs from original.",
+      "allowed_outcomes": "Proposed removal only with complete-proposal consent; no unattended deletion.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_todo_proposal_can_omit_a_declined_similar_task",
+        "test_unattended_capture_preserves_exact_input_and_duplicates"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Helper omission and final-original selection tested separately; actual semantic model and interactive-editor cross-history similarity path are unchecked."
+    },
+    {
+      "id": "O-TODO-06",
+      "clause": "TODO-06",
+      "specification_locator": "docs/Specification.md:172",
+      "symbols": [
+        "llm.todos_are_semantically_similar",
+        "llm._chat"
+      ],
+      "catalog_profile": "model",
+      "representation": "model",
+      "admissible_inputs": "Similarity call transport/model failure; a missing Python package is a dependency failure.",
+      "allowed_outcomes": "Call failure returns no match; not evidence that tasks differ.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "unchecked",
+      "scope": "Explicit catch inspected. Malformed response shape and a missing client have separate errors; failure-policy boundaries beyond transport are U04."
+    },
+    {
+      "id": "O-TODO-07",
+      "clause": "TODO-07",
+      "specification_locator": "docs/Specification.md:173",
+      "symbols": [
+        "commands.run_capture",
+        "commands.run_todos",
+        "commands.prompt_for_task_completion"
+      ],
+      "catalog_profile": "tasks",
+      "representation": "tasks",
+      "admissible_inputs": "Capture versus explicit todos command; viewer toggle is separate.",
+      "allowed_outcomes": "Only todos opens checklist; capture never prompts for pending-task review.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "All production call sites inspected; existing capture tests and source routing have no checklist call."
+    },
+    {
+      "id": "O-TODO-08",
+      "clause": "TODO-08",
+      "specification_locator": "docs/Specification.md:174",
+      "symbols": [
+        "core.parse_todo_details",
+        "core.normalize_todo_dates",
+        "models.PendingTask",
+        "service.DiaryAgent.scan_pending_tasks",
+        "llm.synthesize_entry"
+      ],
+      "catalog_profile": "tasks",
+      "representation": "tasks",
+      "admissible_inputs": "Existing recognized/invalid due and priority fields; newly generated metadata; open/completed tasks.",
+      "allowed_outcomes": "Preserve raw fields, distinguish validity in structured views; generated valid DD-MM-YYYY/low-medium-high only; overflow explicit.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_only_proposed_open_todos_expand_dates"
+      ],
+      "probes": [
+        "P06-metadata-validation"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-09",
+      "clause": "TODO-09",
+      "specification_locator": "docs/Specification.md:175",
+      "symbols": [
+        "commands.run_todos"
+      ],
+      "catalog_profile": "tasks",
+      "representation": "tasks",
+      "admissible_inputs": "Non-TTY stdin, including empty task inventory and piped selection-looking text.",
+      "allowed_outcomes": "List/exit without prompt/dialog/task mutation; do not bypass CLI backend preflight.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_unattended_todos_lists_without_prompting_or_mutating"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-10",
+      "clause": "TODO-10",
+      "specification_locator": "docs/Specification.md:176",
+      "symbols": [
+        "models.PendingTask.source_snapshot",
+        "service.DiaryAgent.scan_pending_tasks",
+        "service.DiaryAgent.mark_tasks_complete"
+      ],
+      "catalog_profile": "tasks",
+      "representation": "tasks",
+      "admissible_inputs": "Selected tasks with stored affected-file snapshot; file/task missing, moved, edited or completed since scan.",
+      "allowed_outcomes": "Validate all affected snapshots/raw open locations before any writes; stale batch abort/reselect; no later-race isolation promised.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Stale second-file batch abort tested; full raw snapshot equality establishes fields at selected offsets. Later physical multi-file failures require PERSIST and are not claimed atomic."
+    },
+    {
+      "id": "O-VIEW-01",
+      "clause": "VIEW-01",
+      "specification_locator": "docs/Specification.md:182",
+      "symbols": [
+        "commands.run_show_day",
+        "service.DiaryAgent.latest_diary_file"
+      ],
+      "catalog_profile": "calendar",
+      "representation": "calendar",
+      "admissible_inputs": "Omitted/explicit day, missing today, absent history, accepted/declined substitution.",
+      "allowed_outcomes": "Default today; offer latest valid dated file only for omitted missing day; explicit missing day reports no result.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_show_day_defaults_to_today_when_day_omitted",
+        "test_run_show_day_asks_to_show_latest_entry_when_today_missing",
+        "test_run_show_day_reports_missing_file"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-VIEW-02",
+      "clause": "VIEW-02",
+      "specification_locator": "docs/Specification.md:183",
+      "symbols": [
+        "commands.run_show_day",
+        "viewer.show_diary_entry"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Stored Markdown with optional display-only annotations; UI installed or absent.",
+      "allowed_outcomes": "Read-only scrollable view; no-toolkit stdout fallback.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_viewer_is_read_only_and_boundary_navigation_is_noop",
+        "test_run_show_day_falls_back_to_stdout_when_ui_unavailable"
+      ],
+      "probes": [
+        "P01-optional-ui-import"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-VIEW-03",
+      "clause": "VIEW-03",
+      "specification_locator": "docs/Specification.md:184",
+      "symbols": [
+        "service.DiaryAgent.dated_diary_files",
+        "service.DiaryAgent.adjacent_entry",
+        "service.DiaryAgent.entry_options",
+        "viewer.show_diary_entry"
+      ],
+      "catalog_profile": "calendar",
+      "representation": "calendar",
+      "admissible_inputs": "Valid-date history, boundary/empty inventory, picker query/select/cancel.",
+      "allowed_outcomes": "Calendar neighbors/no-op boundaries; newest-first in-place picker with date labels/previews.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_navigation_orders_calendar_dates_and_excludes_invalid_files",
+        "test_viewer_is_read_only_and_boundary_navigation_is_noop"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Order/boundaries and real navigation bindings tested. Picker query, selection, cancellation and actual terminal rendering inspected but not independently executed."
+    },
+    {
+      "id": "O-VIEW-04",
+      "clause": "VIEW-04",
+      "specification_locator": "docs/Specification.md:185",
+      "symbols": [
+        "viewer.show_diary_entry",
+        "service.DiaryAgent.toggle_todo",
+        "service.DiaryAgent.update_section"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "Cursor at TODO/non-TODO or selected timestamp section; nonempty/empty edit result.",
+      "allowed_outcomes": "Toggle only checkbox; nonempty body replaces selected body, heading retained; empty edit has no effect.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch",
+        "test_section_mutation_preserves_all_outside_bytes"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Domain mutations tested; actual e-key nested editor/cursor and empty-edit interaction are unchecked."
+    },
+    {
+      "id": "O-VIEW-05",
+      "clause": "VIEW-05",
+      "specification_locator": "docs/Specification.md:186",
+      "symbols": [
+        "viewer.show_diary_entry",
+        "service.DiaryAgent.delete_section",
+        "service.DiaryAgent.set_section_tags"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "t manages selected section; d asks confirmation; cancellation/failure/success.",
+      "allowed_outcomes": "No deletion when declined; confirmed delete affects only selected section/resource; tag mutations use adapter.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_viewer_tag_cancel_clear_replace_are_distinct",
+        "test_delete_section_removes_markdown_section_and_htfs_resource"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Successful tag/delete operations tested. Actual d-dialog decline and physical nested-terminal execution are unchecked; deletion failure ordering is violated separately under PERSIST-01."
+    },
+    {
+      "id": "O-VIEW-06",
+      "clause": "VIEW-06",
+      "specification_locator": "docs/Specification.md:187",
+      "symbols": [
+        "viewer.show_diary_entry"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Explicit successful modification or q/Esc/Ctrl+C; picker open or closed.",
+      "allowed_outcomes": "Refresh after successful modifications; exit/cancel appropriately; no reorganize action.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_viewer_tag_cancel_clear_replace_are_distinct"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Refresh code and exit bindings inspected; real exit events and delete-to-empty refresh not independently exercised."
+    },
+    {
+      "id": "O-VIEW-07",
+      "clause": "VIEW-07",
+      "specification_locator": "docs/Specification.md:188",
+      "symbols": [
+        "viewer.show_diary_entry",
+        "ui._prompt_should_run_in_thread",
+        "ui.launch_editor",
+        "ui._tag_input_dialog"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Nested synchronous prompt inside active viewer asyncio context.",
+      "allowed_outcomes": "Suspend rendering and use thread-safe prompt execution without conflicting applications.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "unchecked",
+      "scope": "Required calls/thread flags are present by static inspection; no live nested-terminal execution was performed. A mocked flag alone is insufficient evidence for the full obligation."
+    },
+    {
+      "id": "O-VIEW-08",
+      "clause": "VIEW-08",
+      "specification_locator": "docs/Specification.md:190",
+      "symbols": [
+        "markdown.DiaryDocument.replace_body",
+        "markdown.DiaryDocument.delete_section",
+        "service.DiaryAgent.update_section",
+        "service.DiaryAgent.delete_section"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "Unique safely located section, Unicode/LF/CRLF source, arbitrary unrelated bytes.",
+      "allowed_outcomes": "Replace owned body/delete owned section; preserve every byte outside selected span.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_section_mutation_preserves_all_outside_bytes"
+      ],
+      "probes": [
+        "P11-exact-save-and-spans"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-VIEW-09",
+      "clause": "VIEW-09",
+      "specification_locator": "docs/Specification.md:191",
+      "symbols": [
+        "markdown.DiaryDocument.unique_section",
+        "service.DiaryAgent.update_section",
+        "service.DiaryAgent.delete_section"
+      ],
+      "catalog_profile": "identity",
+      "representation": "identity",
+      "admissible_inputs": "Missing/ambiguous/unique target; no concurrent-write isolation assumed.",
+      "allowed_outcomes": "Locate safe unique span before mutation; missing/ambiguous do not write.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_duplicate_section_identity_blocks_mutations",
+        "test_delete_section_returns_none_when_heading_is_missing"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-01",
+      "clause": "TAG-01",
+      "specification_locator": "docs/Specification.md:199",
+      "symbols": [
+        "core.default_htfs_path",
+        "htfs_adapter.HTFSAdapter.require_backend",
+        "htfs_adapter.HTFSAdapter.ensure_initialized",
+        "cli.main",
+        ".gitmodules",
+        "requirements.txt"
+      ],
+      "catalog_profile": "backend",
+      "representation": "backend",
+      "admissible_inputs": "Pinned bundled source/dependencies and configured metadata boundary.",
+      "allowed_outcomes": "Use only adapter/Python API; preflight before workflows; metadata belongs to diary boundary.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_bundled_htfs_path_ignores_environment_and_home",
+        "test_adapter_rejects_preloaded_external_htfs",
+        "test_bundled_htfs_resource_tagging_survives_reopening"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-02",
+      "clause": "TAG-02",
+      "specification_locator": "docs/Specification.md:200",
+      "symbols": [
+        "models.DiarySection.section_id",
+        "htfs_adapter.HTFSAdapter.resource_path_for_section",
+        "htfs_adapter.HTFSAdapter.section_id_from_resource_path"
+      ],
+      "catalog_profile": "identity",
+      "representation": "identity",
+      "admissible_inputs": "Section ID in configured diary boundary and backend resource representation.",
+      "allowed_outcomes": "Absolute path plus heading fragment maps section-level identity; no per-bullet or whole-file tagging.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_htfs_adapter_maps_section_to_resource_path_and_back",
+        "test_htfs_adapter_loads_section_from_resource_path"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Roundtrip and resolved section tests use in-boundary paths. Foreign-resource basename collisions and post-capture manual timestamp choice are U03."
+    },
+    {
+      "id": "O-TAG-03",
+      "clause": "TAG-03",
+      "specification_locator": "docs/Specification.md:201",
+      "symbols": [
+        "ui.prompt_for_section_tags",
+        "ui._CommaSeparatedTagCompleter",
+        "commands.run_tags_apply"
+      ],
+      "catalog_profile": "selection",
+      "representation": "selection",
+      "admissible_inputs": "Existing atomic/path tags; accepted/cancelled new tag inputs, including commas.",
+      "allowed_outcomes": "Show roots; complete atomic/full paths; explicit interactive creation consent; command apply itself requests creation.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_tag_prompt_requires_explicit_creation_consent",
+        "test_comma_separated_tag_completer_completes_after_commas"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-04",
+      "clause": "TAG-04",
+      "specification_locator": "docs/Specification.md:202",
+      "symbols": [
+        "core.resource_tags_for_specs",
+        "htfs_adapter.HTFSAdapter.add_tags",
+        "htfs_adapter.HTFSAdapter.tag_section"
+      ],
+      "catalog_profile": "backend",
+      "representation": "backend",
+      "admissible_inputs": "Hierarchical tag specs accepted by pinned HTFS.",
+      "allowed_outcomes": "Pass paths intact for creation; resources use leaf tag identity; backend owns hierarchy.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_tags_apply_creates_and_applies_tags",
+        "test_bundled_htfs_resource_tagging_survives_reopening"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-05",
+      "clause": "TAG-05",
+      "specification_locator": "docs/Specification.md:203",
+      "symbols": [
+        "commands.run_tags_apply",
+        "commands.run_tags_suggest",
+        "service.DiaryAgent.set_section_tags",
+        "llm.suggest_section_tags"
+      ],
+      "catalog_profile": "selection",
+      "representation": "selection",
+      "admissible_inputs": "Explicit additive apply, viewer replacement, or suggestion-only command.",
+      "allowed_outcomes": "Apply adds; accepted viewer change replaces; suggestions from inventory never mutate stores.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_tags_apply_creates_and_applies_tags",
+        "test_run_tags_suggest_uses_available_htfs_tags",
+        "test_viewer_tag_cancel_clear_replace_are_distinct"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Successful outcomes and inventory filtering inspected/tested. Replacement/capture partial-failure handling is not supported by these tests; see P03/P04/P05."
+    },
+    {
+      "id": "O-TAG-06",
+      "clause": "TAG-06",
+      "specification_locator": "docs/Specification.md:204",
+      "symbols": [
+        "commands.run_tags_delete",
+        "htfs_adapter.HTFSAdapter.get_tag_descendants"
+      ],
+      "catalog_profile": "backend",
+      "representation": "backend",
+      "admissible_inputs": "Taxonomy selection, descendants/unused-only options, usage, confirmation or no-TTY.",
+      "allowed_outcomes": "Child-before-parent; block any-used selection under unused-only; final confirmation/--yes; no diary deletion.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_tags_delete_recursively_deletes_descendants_first",
+        "test_run_tags_delete_blocks_when_tags_are_used"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Child order/usage guards tested; non-TTY confirmation and partial taxonomy-deletion failure inspected but not fault-injected."
+    },
+    {
+      "id": "O-TAG-07",
+      "clause": "TAG-07",
+      "specification_locator": "docs/Specification.md:205",
+      "symbols": [
+        "ui.prompt_for_section_tags",
+        "viewer.show_diary_entry",
+        "service.DiaryAgent.set_section_tags"
+      ],
+      "catalog_profile": "selection",
+      "representation": "selection",
+      "admissible_inputs": "Cancelled or accepted tag-list payload, including empty.",
+      "allowed_outcomes": "Cancel preserves old set; accepted empty clears; accepted nonempty replaces; taxonomy/content untouched; failures follow recovery contract.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_viewer_tag_cancel_clear_replace_are_distinct"
+      ],
+      "probes": [
+        "P03-tag-replacement-failure"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-01",
+      "clause": "PERSIST-01",
+      "specification_locator": "docs/Specification.md:209",
+      "symbols": [
+        "service.DiaryAgent.delete_section",
+        "service.DiaryAgent._append_body",
+        "service.DiaryAgent.set_section_tags"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Confirmed operation changing content/metadata, tag-only operation or failure at a store boundary.",
+      "allowed_outcomes": "Markdown authoritative; intent first; content commit before HTFS reconciliation; never metadata-first deletion.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [
+        "P02-delete-write-failure"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-02",
+      "clause": "PERSIST-02",
+      "specification_locator": "docs/Specification.md:210",
+      "symbols": [
+        "service.DiaryAgent.delete_section",
+        "service.DiaryAgent.set_section_tags",
+        "service.DiaryAgent._append_body"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Any mutation requiring prior/intended content/tag state and durable operation identity.",
+      "allowed_outcomes": "Persist sufficient intent first; failure to record intent prevents mutation; retain deletion identity.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [
+        "P02-delete-write-failure",
+        "P03-tag-replacement-failure"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-03",
+      "clause": "PERSIST-03",
+      "specification_locator": "docs/Specification.md:211",
+      "symbols": [
+        "cli.main",
+        "commands._capture_in_editor",
+        "commands.run_todos",
+        "service.DiaryAgent.set_section_tags"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "No-change failure, confirmed success, partial change or uncertain write/reconciliation.",
+      "allowed_outcomes": "Truthful distinct outcomes; confirmed content remains; pending metadata has recovery identity; no false rollback/complete success.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [
+        "P04-capture-tag-exception",
+        "P05-capture-tag-rejected"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-04",
+      "clause": "PERSIST-04",
+      "specification_locator": "docs/Specification.md:212",
+      "symbols": [
+        "cli.build_parser",
+        "service.DiaryAgent"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Explicit operation-targeted metadata retry, divergence/ambiguity, or completed receipt replay.",
+      "allowed_outcomes": "Reconcile metadata only; never replay content; conflict without mutation; retain completion receipt preventing replay.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [
+        "P10-recovery-interface"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-05",
+      "clause": "PERSIST-05",
+      "specification_locator": "docs/Specification.md:213",
+      "symbols": [
+        "htfs_adapter.HTFSAdapter._session",
+        "service.DiaryAgent.set_section_tags",
+        "service.DiaryAgent.delete_section"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Pending reconciliation including backend close/flush/readback failure.",
+      "allowed_outcomes": "Retain prior/intended state until verified completion or explicit resolution; expose recovery actions; no suppressed cleanup errors.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [
+        "P02-delete-write-failure",
+        "P03-tag-replacement-failure"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-01",
+      "clause": "SEARCH-01",
+      "specification_locator": "docs/Specification.md:217",
+      "symbols": [
+        "commands.run_search",
+        "service.DiaryAgent.search",
+        "core.score_text",
+        "core.split_chunks"
+      ],
+      "catalog_profile": "search",
+      "representation": "search",
+      "admissible_inputs": "Nonblank query/filter; history with/without timestamp sections; optional section restriction.",
+      "allowed_outcomes": "Retrieve locally and rank body/tag excerpts, six by default; invalid empty request reports error.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_search_returns_best_matching_history_chunks",
+        "test_search_matches_sections_via_tags"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-02",
+      "clause": "SEARCH-02",
+      "specification_locator": "docs/Specification.md:218",
+      "symbols": [
+        "commands._section_ids_for_tag_expression",
+        "commands.run_search",
+        "htfs_adapter.HTFSAdapter.query_resource_paths",
+        "service.DiaryAgent.search"
+      ],
+      "catalog_profile": "search",
+      "representation": "search",
+      "admissible_inputs": "HTFS expression result IDs plus optional text query.",
+      "allowed_outcomes": "Restrict retrieval to matches; tag-only lists sections/tags without answer synthesis.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_search_supports_raw_tag_expressions_without_llm"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-03",
+      "clause": "SEARCH-03",
+      "specification_locator": "docs/Specification.md:219",
+      "symbols": [
+        "commands._resolve_tag_expression",
+        "commands.run_search",
+        "llm.tag_expression_from_natural_language"
+      ],
+      "catalog_profile": "search",
+      "representation": "search",
+      "admissible_inputs": "Raw expression or natural language depending on model configuration; translation/query error.",
+      "allowed_outcomes": "Only configured workflow translates; failures never widen to unfiltered search.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_search_translates_natural_language_tag_filters_when_llm_enabled",
+        "test_run_search_supports_raw_tag_expressions_without_llm"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Translation routing and scoped success tested; actual invalid-expression/backend parser failures are inspected only, with no new executed invalid-filter trace."
+    },
+    {
+      "id": "O-SEARCH-04",
+      "clause": "SEARCH-04",
+      "specification_locator": "docs/Specification.md:220",
+      "symbols": [
+        "llm.answer_query",
+        "commands.run_search"
+      ],
+      "catalog_profile": "model",
+      "representation": "model",
+      "admissible_inputs": "Configured model, query and locally retrieved excerpts/tags.",
+      "allowed_outcomes": "Prompt uses only supplied evidence/cites filenames/acknowledges insufficiency; print supporting excerpts.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_answer_query_includes_section_tags_in_prompt"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Prompt inspected/tested. No claim of factual model output or complete live-model compliance."
+    },
+    {
+      "id": "O-SEARCH-05",
+      "clause": "SEARCH-05",
+      "specification_locator": "docs/Specification.md:221",
+      "symbols": [
+        "commands.run_search",
+        "llm._chat"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "No model or failed answer synthesis after retrieval.",
+      "allowed_outcomes": "Print same local results with warning on synthesis failure; do not extend fallback to tag-filter failure.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_run_search_falls_back_to_basic_text_search_when_llm_is_unavailable"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-06",
+      "clause": "SEARCH-06",
+      "specification_locator": "docs/Specification.md:222",
+      "symbols": [
+        "commands.run_search",
+        "service.DiaryAgent.search"
+      ],
+      "catalog_profile": "search",
+      "representation": "search",
+      "admissible_inputs": "Empty result or ordinary search.",
+      "allowed_outcomes": "No-match is normal; no diary/tag mutation by search.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "All search code paths inspected; empty-answer early return is explicit. Metadata initialization at operational startup is separately required, so no assertion of a write-free whole CLI invocation."
+    },
+    {
+      "id": "O-QUAL-01",
+      "clause": "QUAL-01",
+      "specification_locator": "docs/Specification.md:240",
+      "symbols": [
+        "diary_agent_app/llm.py",
+        "diary_agent_app/markdown.py",
+        "requirements.txt"
+      ],
+      "catalog_profile": "direct-contract",
+      "representation": "direct-contract",
+      "admissible_inputs": "Local workflows and existing dependencies.",
+      "allowed_outcomes": "Human-readable local Markdown; no added cloud/model-download workflow.",
+      "authority": "required by specification v1.0",
+      "tests": [],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Dependency/call-site inspection, not a network-isolation proof."
+    },
+    {
+      "id": "O-QUAL-02",
+      "clause": "QUAL-02",
+      "specification_locator": "docs/Specification.md:241",
+      "symbols": [
+        "ui._start_editor_action",
+        "ui.launch_editor"
+      ],
+      "catalog_profile": "editor",
+      "representation": "editor",
+      "admissible_inputs": "Background model action completion/failure and enabled toolbar actions.",
+      "allowed_outcomes": "Off-loop work; release lock on error; hints reflect actual enabled actions.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Shared executor use and lock transitions tested with deterministic scheduled work. Actual worker-thread execution and all toolbar rendering states remain unchecked."
+    },
+    {
+      "id": "O-QUAL-03",
+      "clause": "QUAL-03",
+      "specification_locator": "docs/Specification.md:242",
+      "symbols": [
+        "cli.main",
+        "commands._capture_in_editor",
+        "ui.py",
+        "viewer.py"
+      ],
+      "catalog_profile": "outcomes",
+      "representation": "outcomes",
+      "admissible_inputs": "Config/backend/package/model/command failures, including failures after save.",
+      "allowed_outcomes": "Clear failures and documented fallbacks; no silent successful no-op or false complete success.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_cli_htfs_initialization_failure_prevents_capture",
+        "test_search_does_not_hide_htfs_read_failures"
+      ],
+      "probes": [
+        "P01-optional-ui-import",
+        "P04-capture-tag-exception",
+        "P05-capture-tag-rejected"
+      ],
+      "inspection_status": "supported_within_scope",
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-QUAL-04",
+      "clause": "QUAL-04",
+      "specification_locator": "docs/Specification.md:243",
+      "symbols": [
+        "service.DiaryAgent.day_file",
+        "models.DiarySection.section_id",
+        "diary_agent.py"
+      ],
+      "catalog_profile": "store",
+      "representation": "store",
+      "admissible_inputs": "Existing stored data and documented CLI surface during refactoring.",
+      "allowed_outcomes": "Keep filename/heading/identity/metadata/entrypoint formats; no incidental migration.",
+      "authority": "required by specification v1.0",
+      "tests": [
+        "test_append_entry_verbatim_uses_serial_suffix_for_same_minute"
+      ],
+      "probes": [],
+      "inspection_status": "supported_within_scope",
+      "scope": "Storage/identity derivation and entrypoint compatibility inspected and ordinary historical formats tested. New relative-date rendering boundary failure is recorded under DATA-01/04."
+    }
+  ],
+  "design_choices": [
+    {
+      "id": "J01",
+      "kind": "justified representation choice",
+      "decision": "Store source offsets and optional accepted tag lists; no new persistent ID scheme."
+    },
+    {
+      "id": "J02",
+      "kind": "required policy; representation unresolved",
+      "decision": "PERSIST intent/receipt schema and recovery CLI syntax must be designed during repair; this does not block finding their absence."
+    }
+  ],
+  "unchecked": [
+    {
+      "id": "U01",
+      "scope": "Live prompt_toolkit terminal rendering, nested synchronous execution and worker scheduling; CAP-05 suggestion-specific traces and VIEW-07."
+    },
+    {
+      "id": "U02",
+      "scope": "Live Ollama factual output, timeout/cancellation/liveness, arbitrary malformed responses and performance; no universal model guarantees are asserted."
+    },
+    {
+      "id": "U03",
+      "scope": "Capture text containing manually entered timestamp delimiters: post-save tagging currently selects latest parsed section; desired target among multiple new sections is not explicit. Foreign HTFS resource paths sharing a diary basename are not separately validated in this audit."
+    },
+    {
+      "id": "U04",
+      "scope": "TODO-06 states similarity-model call failure yields no match. Transport/model-call exceptions are caught, but missing client/malformed response raises. Whether malformed response is a call failure is unclear; record the boundary rather than silently narrowing it."
+    },
+    {
+      "id": "U05",
+      "scope": "Actual device/power loss, concurrent external writes after validation, arbitrary process crashes and nondeterministic schedules; no unsupported atomicity/durability/progress promise."
+    },
+    {
+      "id": "U06",
+      "scope": "No compiled concrete-to-abstract refinement proof or Lean witness reuse; all support is static or finite execution evidence."
+    }
+  ]
+}

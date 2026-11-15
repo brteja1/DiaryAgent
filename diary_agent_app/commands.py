@@ -9,14 +9,14 @@ from collections.abc import Sequence
 
 from . import ui
 from .core import (
-    DATE_FMT,
+    format_diary_date,
     parse_explicit_day_input,
     format_entry_title,
-    resource_tags_for_specs,
 )
 from .models import DiarySection, PendingTask, SearchResult
 from .service import DiaryAgent
 from .htfs_adapter import HTFSAdapter
+from .persistence import OperationJournal, PersistenceError
 from .ui import (
     launch_editor,
     prompt_for_section_tags,
@@ -60,7 +60,7 @@ def get_htfs_adapter(diary_dir: Path) -> HTFSAdapter:
 
 def capture_info_message(day_text: str | None = None) -> str:
     normalized_day = (
-        dt.date.today().strftime(DATE_FMT)
+        format_diary_date(dt.date.today())
         if day_text is None
         else parse_explicit_day_input(day_text)
     )
@@ -89,7 +89,9 @@ def _capture_in_editor(agent: DiaryAgent, day_text: str | None) -> int:
 
     def rewrite(text: str) -> str:
         candidate = agent.synthesize_entry(text, day_text=day_text)
-        return agent.prepare_rewrite_for_review(candidate, day_text=day_text)
+        return agent.prepare_rewrite_for_review(
+            candidate, day_text=day_text, original=text
+        )
 
     final_entry, suggested_tags = launch_editor(
         state="Capturing update",
@@ -105,18 +107,27 @@ def _capture_in_editor(agent: DiaryAgent, day_text: str | None) -> int:
     if not appended:
         print("No update captured.")
         return 0
-    section = agent.latest_section_for_file(path)
-    if section is not None:
-        selected = prompt_for_section_tags(
-            all_tags,
-            adapter.get_top_level_tags(),
-            adapter.get_all_tag_paths(),
-            suggested_tags=suggested_tags,
-        )
-        if selected:
-            adapter.add_tags(selected)
-            adapter.tag_section(section, resource_tags_for_specs(selected))
     _print_saved_capture(path, final_entry)
+    try:
+        section = agent.latest_section_for_file(path)
+        if section is not None:
+            selected = prompt_for_section_tags(
+                all_tags,
+                adapter.get_top_level_tags(),
+                adapter.get_all_tag_paths(),
+                suggested_tags=suggested_tags,
+            )
+            if selected:
+                agent.set_section_tags(section, selected, additive=True)
+    except PersistenceError as exc:
+        print(f"Note saved; tagging pending. {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(
+            f"Note saved; tagging could not start. Capture operation {agent.last_operation_id}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -128,7 +139,9 @@ def _capture_text(agent: DiaryAgent, text: str, day_text: str | None) -> int:
     if agent.llm_enabled and sys.stdin.isatty():
         try:
             candidate = agent.synthesize_entry(text, day_text=day_text)
-            candidate = agent.prepare_rewrite_for_review(candidate, day_text=day_text)
+            candidate = agent.prepare_rewrite_for_review(
+                candidate, day_text=day_text, original=text
+            )
             candidate, skipped = agent.review_entry_todos(candidate)
             if candidate != text:
                 print("Proposed content (empty means no append):\n")
@@ -359,6 +372,9 @@ def run_show_day(agent: DiaryAgent, day_text: str | None = None) -> int:
             agent.diary_dir / current_title,
             heading,
         ),
+        reload_entry=lambda current_title: (agent.diary_dir / current_title)
+        .read_text(encoding="utf-8")
+        .rstrip(),
     )
     return 0
 
@@ -401,15 +417,49 @@ def run_tags_apply(
     tags: Sequence[str],
 ) -> int:
     section = resolve_section(agent, day_text, time_text)
-    adapter = get_htfs_adapter(agent.diary_dir)
-    adapter.add_tags(tags)
-    unsuccessful = adapter.tag_section(section, resource_tags_for_specs(tags))
-    if unsuccessful:
-        print("Some tags could not be applied:")
-        for tag in unsuccessful:
-            print(tag)
-        return 1
+    agent.set_section_tags(section, list(tags), additive=True)
     print(f"Tagged {section.section_id} with {', '.join(tags)}")
+    return 0
+
+
+def run_recovery(
+    agent: DiaryAgent,
+    action: str,
+    identifier: str | None = None,
+    *,
+    include_complete: bool = False,
+    reason: str = "",
+    yes: bool = False,
+) -> int:
+    journal = OperationJournal(agent.diary_dir)
+    if action == "list":
+        operations = journal.list(include_complete)
+        if not operations:
+            print("No recovery operations found.")
+        for operation in operations:
+            print(f"{operation.id}  {operation.kind}  {operation.status}")
+        return 0
+    if action == "show":
+        from dataclasses import asdict
+        import json
+
+        print(
+            json.dumps(asdict(journal.load(identifier)), indent=2, ensure_ascii=False)
+        )
+        return 0
+    if action == "resolve":
+        if not yes and (
+            not sys.stdin.isatty()
+            or not prompt_yes_no(
+                "Resolve this operation without retrying its metadata changes?"
+            )
+        ):
+            print("Resolution cancelled; operation retained.")
+            return 1
+        operation = journal.resolve(identifier, reason)
+    else:
+        operation = agent.persistence().retry(identifier)
+    print(f"Operation {operation.id}: {operation.status}")
     return 0
 
 
@@ -524,15 +574,8 @@ def run_tags_delete(
         print("Aborted.")
         return 0
 
-    deleted: list[str] = []
-    for current_tag in delete_order:
-        if adapter.delete_tag(current_tag):
-            deleted.append(current_tag)
-        else:
-            print(f"Failed to delete tag: {current_tag}")
-            return 1
-
-    print(f"Deleted {len(deleted)} tag(s): {', '.join(deleted)}")
+    agent.delete_taxonomy_tags(delete_order)
+    print(f"Deleted {len(delete_order)} tag(s): {', '.join(delete_order)}")
     return 0
 
 

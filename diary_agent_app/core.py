@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from .models import AppConfig, PendingTask
+from .todo_metadata import parsed_due_date
 
 TODO_RE = re.compile(r"^(?P<indent>\s*)- \[(?P<state>[ xX])\] (?P<text>.+?)\s*$")
 TODO_METADATA_SUFFIX_RE = re.compile(
@@ -44,6 +45,46 @@ WEEKDAY_ABBREVIATION_TO_NAME = {
 }
 DATE_FMT = "%d_%m_%Y"
 CONFIG_RELATIVE_PATH = Path(".config") / "diary_agent" / "config.txt"
+
+
+def format_diary_date(day: dt.date) -> str:
+    return f"{day.day:02d}_{day.month:02d}_{day.year:04d}"
+
+
+def validate_generated_todo_metadata(entry: str, original: str = "") -> None:
+    """Reject invalid *new* model fields, retaining preexisting raw fields.
+
+    This guard is only for proposal generation. It never validates/rejects a
+    verbatim save. Original legacy/unvalidated fields remain user-controlled.
+    """
+    existing_due, existing_priority = set(), set()
+    for line in original.splitlines():
+        match = TODO_RE.match(line)
+        if match:
+            _, due, priority = parse_todo_details(match.group("text"))
+            existing_due.add(due)
+            existing_priority.add(priority)
+    for line in entry.splitlines():
+        match = TODO_RE.match(line)
+        if not match:
+            continue
+        _, due, priority = parse_todo_details(match.group("text"))
+        if due is not None and due not in existing_due:
+            if (
+                not re.fullmatch(r"[0-9]{2}-[0-9]{2}-[0-9]{4}", due)
+                or parsed_due_date(due) is None
+            ):
+                raise RuntimeError(
+                    f"LLM proposal generated invalid due metadata: {due}"
+                )
+        if (
+            priority is not None
+            and priority not in existing_priority
+            and priority not in {"low", "medium", "high"}
+        ):
+            raise RuntimeError(
+                f"LLM proposal generated invalid priority metadata: {priority}"
+            )
 
 
 def tokenize(text: str) -> list[str]:
@@ -91,7 +132,12 @@ def expand_todo_date_references(text: str, base_date: dt.date) -> str:
             target_date = base_date + dt.timedelta(days=days_ahead)
         return f"{target_date.day:02d}-{target_date.month:02d}-{target_date.year:04d}"
 
-    return TODO_DATE_REFERENCE_RE.sub(replace, text)
+    try:
+        return TODO_DATE_REFERENCE_RE.sub(replace, text)
+    except OverflowError as exc:
+        raise RuntimeError(
+            "Relative TODO date is outside the supported calendar range."
+        ) from exc
 
 
 def render_todo_details(due: str | None = None, priority: str | None = None) -> str:
@@ -272,7 +318,7 @@ def normalize_todo_dates(entry: str, base_date: dt.date) -> str:
 
         todo_text, due, priority = parse_todo_details(match.group("text").strip())
         todo_text = expand_todo_date_references(todo_text, base_date)
-        if due is not None:
+        if due is not None and TODO_DATE_REFERENCE_RE.fullmatch(due):
             due = expand_todo_date_references(due, base_date)
         normalized_lines.append(
             render_todo_line(
@@ -318,7 +364,7 @@ def parse_explicit_day_input(day_text: str) -> str:
         try:
             days_offset = int(normalized)
             target_date = dt.date.today() + dt.timedelta(days=days_offset)
-            return target_date.strftime(DATE_FMT)
+            return format_diary_date(target_date)
         except (ValueError, OverflowError):
             pass
 
@@ -364,4 +410,4 @@ def build_entry_search_text(day_text: str, title: str) -> str:
 
 
 def resource_tags_for_specs(tags: Sequence[str]) -> list[str]:
-    return [tag.rsplit("/", 1)[-1].strip() for tag in tags if tag.strip()]
+    return [tag.rsplit("/", 1)[-1] for tag in tags if tag]

@@ -1,0 +1,671 @@
+#!/usr/bin/env python3
+"""Executable review probes, not repairs or a replacement specification.
+
+Exit 1 means a conformance violation; exit 2 means evidence could not be built.
+The runtime and specification are pinned by the mapping; changed semantics
+require a fresh review. Static conclusions are labeled separately from direct
+comparison probes; this is not a general-purpose future-code verifier.
+Each probe runs against temporary data. External work (model/terminal/storage
+failure) is controlled at its boundary; Markdown and HTFS observations are real.
+"""
+from __future__ import annotations
+
+import argparse
+from collections import Counter
+from contextlib import redirect_stdout, redirect_stderr
+import datetime as dt
+from hashlib import sha256
+import importlib.metadata
+import io
+import json
+from pathlib import Path
+import platform
+import re
+import subprocess
+import sys
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from diary_agent_app import cli, commands, core, llm, service  # noqa: E402
+from diary_agent_app.htfs_adapter import HTFSAdapter  # noqa: E402
+from diary_agent_app.markdown import read_markdown  # noqa: E402
+from diary_agent_app.models import AppConfig  # noqa: E402
+from diary_agent_app.service import DiaryAgent  # noqa: E402
+from diary_agent_app.persistence import OperationJournal, PersistenceError  # noqa: E402
+
+PREFIX = "urn:csabs:"
+CATALOG_IDS = [
+    "concept/HoareTriple",
+    "operation/HoareTriple-basis-holds",
+    "concept/TransitionSystem",
+    "operation/TransitionSystem-post",
+    "concept/TotalOrder",
+    "operation/TotalOrder-basis-le",
+    "axiom/TotalOrder-transitive",
+    "concept/OptionType",
+    "operation/option-none",
+    "operation/OptionType-some",
+    "operation/option-case",
+    "axiom/option-case-none",
+    "axiom/option-case-some",
+    "source/awodey-types",
+    "source/sf-hoare",
+    "concept/EquivalenceRelation",
+    "operation/EquivalenceRelation-basis-class",
+    "axiom/equivalence-transitive",
+]
+
+
+def digest(path):
+    return sha256(path.read_bytes()).hexdigest()
+
+
+def git(*args, directory=ROOT):
+    return subprocess.run(
+        ["git", "-C", str(directory), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def result(
+    identifier,
+    obligations,
+    expected,
+    actual,
+    supported,
+    method="observation_comparison",
+):
+    return dict(
+        id=identifier,
+        obligations=obligations,
+        expected=expected,
+        actual=actual,
+        assessment_method=method,
+        status="supported_within_scope" if supported else "violated",
+    )
+
+
+def optional_ui_import():
+    """O-CAP-08/O-VIEW-02: package absence must still permit CLI fallbacks."""
+    code = """import importlib.abc, sys
+class MissingToolkit(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname == 'prompt_toolkit' or fullname.startswith('prompt_toolkit.'):
+            raise ModuleNotFoundError('simulated optional package absence')
+sys.meta_path.insert(0, MissingToolkit())
+from diary_agent_app import cli
+print('import available')
+"""
+    process = subprocess.run(
+        [sys.executable, "-B", "-c", code],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=20,
+    )
+    return result(
+        "P01-optional-ui-import",
+        ["O-CAP-08", "O-VIEW-02", "O-QUAL-03"],
+        "CLI imports so documented no-toolkit workflows can run",
+        dict(returncode=process.returncode, stderr=process.stderr.strip()),
+        process.returncode == 0,
+    )
+
+
+def cross_store_delete(root):
+    """O-PERSIST-01/02/05: failed content commit cannot delete metadata."""
+    path = root / "14_11_2026.md"
+    original = "## 09:00\n\nA note\n"
+    path.write_text(original)
+    adapter = commands.get_htfs_adapter(root)
+    agent = DiaryAgent(root, None)
+    section = agent.section_for_id(path.name + "#09:00")
+    agent.set_section_tags(section, ["Old"])
+    record = None
+    with patch.object(
+        service, "write_markdown", side_effect=OSError("injected content write failure")
+    ):
+        try:
+            agent.delete_section(path, "09:00")
+        except PersistenceError as exc:
+            record = OperationJournal(root).load(exc.operation.id)
+    tags = adapter.section_tags(section)
+    retained = bool(
+        record
+        and record.kind == "delete_section"
+        and record.tags[0].before.tags == ["Old"]
+        and record.tags[0].intended.tags == []
+        and record.files[0].state == "not_written"
+    )
+    return result(
+        "P02-delete-write-failure",
+        ["O-PERSIST-01", "O-PERSIST-02", "O-PERSIST-05"],
+        dict(
+            content_unchanged=True,
+            tags=["Old"],
+            recovery_intent="retained before mutation",
+        ),
+        dict(
+            content_unchanged=path.read_text() == original,
+            tags=tags,
+            operation_id=record.id if record else None,
+            intent_retained=retained,
+            status=record.status if record else None,
+        ),
+        path.read_text() == original
+        and tags == ["Old"]
+        and retained
+        and record.status == "failed",
+    )
+
+
+def replacement_failure(root):
+    """O-TAG-07/O-PERSIST-02/05: retain intent, then reconcile metadata only."""
+    path = root / "14_11_2026.md"
+    path.write_text("## 09:00\n\nA note\n")
+    before = path.read_bytes()
+    adapter = commands.get_htfs_adapter(root)
+    agent = DiaryAgent(root, None)
+    section = agent.section_for_id(path.name + "#09:00")
+    agent.set_section_tags(section, ["Old"])
+    record = None
+    with patch.object(
+        HTFSAdapter, "tag_section", side_effect=RuntimeError("injected tagging failure")
+    ):
+        try:
+            agent.set_section_tags(section, ["New"])
+        except PersistenceError as exc:
+            record = OperationJournal(root).load(exc.operation.id)
+    retained = bool(
+        record
+        and record.tags[0].before.tags == ["Old"]
+        and record.tags[0].intended.tags == ["New"]
+    )
+    pending_tags = adapter.section_tags(section)
+    retried = agent.persistence().retry(record.id) if record else None
+    after_retry = adapter.section_tags(section)
+    # A durable receipt must preserve later manual state.
+    adapter.clear_section_tags(section)
+    adapter.tag_section(section, ["Old"])
+    replay = agent.persistence().retry(record.id) if record else None
+    return result(
+        "P03-tag-replacement-failure",
+        ["O-TAG-07", "O-PERSIST-02", "O-PERSIST-05"],
+        "Retain prior/intended state; retry reaches intended tags; receipt prevents replay",
+        dict(
+            intent_retained=retained,
+            pending_tags=pending_tags,
+            retry_status=retried.status if retried else None,
+            tags_after_retry=after_retry,
+            receipt_preserves_manual_tags=adapter.section_tags(section) == ["Old"],
+            content_unchanged=path.read_bytes() == before,
+        ),
+        retained
+        and retried.status == "complete"
+        and after_retry == ["New"]
+        and replay.status == "complete"
+        and adapter.section_tags(section) == ["Old"]
+        and path.read_bytes() == before,
+    )
+
+
+def post_capture_failure(root, reject_list=False):
+    """O-PERSIST-03: a saved note and unresolved tags must remain distinguishable."""
+    stdout, stderr = io.StringIO(), io.StringIO()
+    injected = (
+        dict(return_value=["New"])
+        if reject_list
+        else dict(side_effect=RuntimeError("injected tagging failure"))
+    )
+    with patch.object(
+        cli, "load_or_initialize_config", return_value=AppConfig(root, None)
+    ), patch.object(
+        commands, "launch_editor", return_value=("Saved note", [])
+    ), patch.object(
+        commands, "prompt_for_section_tags", return_value=["New"]
+    ), patch.object(
+        HTFSAdapter, "tag_section", **injected
+    ), redirect_stdout(
+        stdout
+    ), redirect_stderr(
+        stderr
+    ):
+        code = cli.main(["capture", "--day", "14_11_2026"])
+    before_retry = (root / "14_11_2026.md").read_bytes()
+    saved = b"Saved note" in before_retry
+    pending = OperationJournal(root).list()
+    identified = len(pending) == 1 and pending[0].id in stderr.getvalue()
+    complete = (
+        DiaryAgent(root, None).persistence().retry(pending[0].id)
+        if identified
+        else None
+    )
+    return result(
+        "P05-capture-tag-rejected" if reject_list else "P04-capture-tag-exception",
+        ["O-PERSIST-03", "O-QUAL-03"],
+        "Acknowledge saved content, report unresolved tagging with operation ID; metadata retry never duplicates content",
+        dict(
+            code=code,
+            content_saved=saved,
+            stdout=stdout.getvalue(),
+            stderr=stderr.getvalue(),
+            recovery_identified=identified,
+            retry_status=complete.status if complete else None,
+            content_unchanged_by_retry=(root / "14_11_2026.md").read_bytes()
+            == before_retry,
+        ),
+        code == 1
+        and saved
+        and identified
+        and bool(stdout.getvalue())
+        and complete.status == "complete"
+        and (root / "14_11_2026.md").read_bytes() == before_retry,
+    )
+
+
+def metadata(root):
+    """O-TODO-08: read raw metadata, distinguish validity, constrain generation."""
+    path = root / "14_11_2026.md"
+    path.write_text(
+        "- [ ] Invalid [due: 31-02-2026] [priority: urgent]\n"
+        "- [ ] Valid [due: 2026-11-16] [priority: high]\n"
+    )
+    tasks = DiaryAgent(root, None).scan_pending_tasks()
+    observation = [
+        dict(
+            text=t.text,
+            due=t.due,
+            priority=t.priority,
+            due_status=t.due_status,
+            priority_status=t.priority_status,
+        )
+        for t in tasks
+    ]
+    generated = "- [ ] New generated item [due: 31-02-2026] [priority: urgent]"
+    model = SimpleNamespace(chat=lambda **kwargs: {"message": {"content": generated}})
+    output = io.StringIO()
+    with patch.object(llm, "ollama", model), patch.object(
+        sys.stdin, "isatty", return_value=True
+    ), patch.object(commands, "prompt_yes_no", return_value=True), redirect_stdout(
+        output
+    ):
+        code = commands.run_capture(
+            DiaryAgent(root, "controlled-model"),
+            "Raw input without metadata",
+            "13_11_2026",
+        )
+    saved = read_markdown(root / "13_11_2026.md")
+    return result(
+        "P06-metadata-validation",
+        ["O-TODO-08"],
+        "Structured observation distinguishes validated due/priority from preserved unvalidated text",
+        dict(
+            existing_task_observations=observation,
+            generated_invalid_metadata_saved=generated in saved,
+            generated_capture_code=code,
+            generated_capture_output=output.getvalue(),
+        ),
+        [t.due_status for t in tasks] == ["unvalidated", "validated"]
+        and [t.priority_status for t in tasks] == ["unvalidated", "validated"]
+        and generated not in saved
+        and "Raw input without metadata" in saved
+        and code == 0,
+    )
+
+
+def relative_lower_bound():
+    """O-DATA-01/04: representable dates require four-digit year filenames."""
+    offset = str((dt.date(1, 1, 1) - dt.date.today()).days)
+    actual = core.parse_explicit_day_input(offset)
+    with TemporaryDirectory(prefix="diary-date-boundary-") as directory:
+        path, _ = DiaryAgent(Path(directory), None).append_entry_verbatim(
+            "Year one note", offset
+        )
+        filename = path.name
+    return result(
+        "P07-relative-year-one",
+        ["O-DATA-01", "O-DATA-04"],
+        "01_01_0001",
+        dict(relative_input=offset, parsed=actual, written_filename=filename),
+        actual == "01_01_0001" and filename == "01_01_0001.md",
+    )
+
+
+def completed_history(root):
+    """O-TODO-04: completed tasks are not an existing open-task duplicate."""
+    path = root / "26_03_2026.md"
+    path.write_text("## 09:00\n\n- [x] Buy milk\n")
+    agent = DiaryAgent(root, "test-model")
+    proposed = agent.prepare_rewrite_for_review("- [ ] Buy milk", "26_03_2026")
+    return result(
+        "P08-completed-todo-history",
+        ["O-TODO-04"],
+        "- [ ] Buy milk",
+        proposed,
+        proposed == "- [ ] Buy milk",
+    )
+
+
+def inherited_submit_filter():
+    """O-CAP-04: refute the suspected inherited Meta+Enter bypass correctly.
+
+    Evaluating an inactive handler directly would produce a false finding.
+    Evaluate the *actual* toolkit binding filter under the real application.
+    """
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.application.current import set_app
+    from prompt_toolkit.filters import Condition
+    from prompt_toolkit.input import DummyInput
+    from prompt_toolkit.output import DummyOutput
+    from prompt_toolkit.keys import Keys
+
+    session = PromptSession(multiline=True, input=DummyInput(), output=DummyOutput())
+    session.default_buffer.read_only = Condition(lambda: True)
+    with set_app(session.app):
+        bindings = session.app._default_bindings.get_bindings_for_keys(
+            (Keys.Escape, Keys.ControlM)
+        )
+        enabled = [b.handler.__name__ for b in bindings if b.filter()]
+    return result(
+        "P09-inherited-submit-filter",
+        ["O-CAP-04"],
+        "No inherited Meta+Enter submit binding is enabled while read-only",
+        dict(binding_count=len(bindings), enabled=enabled),
+        bool(bindings) and not enabled,
+    )
+
+
+def journal_interface():
+    """O-PERSIST-04: execute inspection, retry and receipt behavior via the CLI."""
+    with TemporaryDirectory(prefix="diary-recovery-cli-") as directory:
+        root = Path(directory)
+        agent = DiaryAgent(root, None)
+        path, _ = agent.append_entry_verbatim("Original note", "14_11_2026")
+        identifier = agent.last_operation_id
+        path.write_text("Later manual content\n")
+        output = io.StringIO()
+        with patch.object(
+            cli, "load_or_initialize_config", return_value=AppConfig(root, None)
+        ), redirect_stdout(output):
+            shown = cli.main(["recovery", "show", identifier])
+            retried = cli.main(["recovery", "retry", identifier])
+            listed = cli.main(["recovery", "list", "--all"])
+        record = OperationJournal(root).load(identifier)
+        unchanged = path.read_text() == "Later manual content\n"
+        return result(
+            "P10-recovery-interface",
+            ["O-PERSIST-04"],
+            "Explicit inspection/retry actions; completed receipt is a no-op even after manual content changes",
+            dict(
+                show_code=shown,
+                retry_code=retried,
+                list_code=listed,
+                status=record.status,
+                receipt_retained=record.completed is not None,
+                manual_content_unchanged=unchanged,
+                operation_identified=identifier in output.getvalue(),
+            ),
+            shown == retried == listed == 0
+            and record.status == "complete"
+            and record.completed is not None
+            and unchanged
+            and identifier in output.getvalue(),
+        )
+
+
+def exact_save_and_spans(root):
+    """O-CAP-06/10/O-VIEW-08: independent exact-byte observations."""
+    agent = DiaryAgent(root, None)
+    body = "  Ω draft  \n- [ ] tomorrow [priority: unusual]  \n\n"
+    with patch.object(sys.stdin, "isatty", return_value=False), redirect_stdout(
+        io.StringIO()
+    ):
+        code = commands.run_capture(agent, body, "14_11_2026")
+    path = root / "14_11_2026.md"
+    saved = path.read_bytes().endswith(body.encode())
+    prefix = b"Preamble  \r\n## 09:00\r\n\r\n"
+    suffix = b"## 10:00\r\n\r\nKeep  "
+    path.write_bytes(prefix + b"old\r\n\r\n" + suffix)
+    agent.update_section(path, "09:00", "new  ")
+    edited = path.read_bytes()
+    return result(
+        "P11-exact-save-and-spans",
+        ["O-CAP-06", "O-CAP-10", "O-VIEW-08"],
+        "Exact submitted body and exact prefix/suffix outside edited body",
+        dict(
+            code=code,
+            body_exact=saved,
+            prefix_exact=edited.startswith(prefix),
+            suffix_exact=edited.endswith(suffix),
+        ),
+        code == 0 and saved and edited.startswith(prefix) and edited.endswith(suffix),
+    )
+
+
+def read_json_command(command):
+    completed = subprocess.run(
+        command, check=True, capture_output=True, text=True, timeout=30
+    )
+    return json.loads(completed.stdout)
+
+
+def replace_generated(path, name, content):
+    """Keep explanatory prose separate from tables derived from one mapping."""
+    before, after = f"<!-- BEGIN {name} -->", f"<!-- END {name} -->"
+    text = path.read_text()
+    if text.count(before) != 1 or text.count(after) != 1:
+        raise RuntimeError(f"Missing/ambiguous generated region in {path}")
+    start, end = text.index(before) + len(before), text.index(after)
+    path.write_text(text[:start] + "\n" + content + "\n" + text[end:])
+
+
+def render_docs(mapping, evidence):
+    def cell(value):
+        return value.replace("|", "\\|").replace("\n", " ")
+
+    table = [
+        "| Obligation / clause | Concrete API | Admissible input | Required outcome / effect | Interpretation |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for item in mapping["obligations"]:
+        api = ", ".join(f"`{symbol}`" for symbol in item["symbols"])
+        table.append(
+            "| "
+            + " | ".join(
+                map(
+                    cell,
+                    [
+                        item["id"],
+                        api,
+                        item["admissible_inputs"],
+                        item["allowed_outcomes"],
+                        item["catalog_profile"],
+                    ],
+                )
+            )
+            + " |"
+        )
+    replace_generated(
+        ROOT / "docs/conformance/ImplementationMapping.md",
+        "OBLIGATIONS",
+        "\n".join(table),
+    )
+    table = [
+        "| Obligation | Assessment | Executed probe / existing test / static scope |",
+        "| --- | --- | --- |",
+    ]
+    for item in evidence["obligations"]:
+        links = ", ".join(item["probes"] + [f"`{name}`" for name in item["tests"]])
+        table.append(
+            f"| {item['id']} | {item['status']} | {cell(links + '. ' + item['scope'])} |"
+        )
+    replace_generated(
+        ROOT / "docs/conformance/ConformanceReview.md",
+        "EVIDENCE-TABLE",
+        "\n".join(table),
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--catalog-root",
+        type=Path,
+        default=Path("/linuxdev/github/mathematical-abstractions"),
+    )
+    parser.add_argument(
+        "--output", type=Path, default=ROOT / "docs/conformance/evidence.json"
+    )
+    parser.add_argument(
+        "--render-docs",
+        action="store_true",
+        help="Refresh generated mapping/evidence tables without changing review prose",
+    )
+    args = parser.parse_args()
+    mapping_path = ROOT / "docs/conformance/mapping.json"
+    mapping = json.loads(mapping_path.read_text())
+    spec = (ROOT / "docs/Specification.md").read_text()
+    clauses = set(
+        re.findall(
+            r"\*\*((?:DOC|DATA|CLI|CFG|DEP|LLM|CAP|TODO|VIEW|TAG|PERSIST|SEARCH|QUAL)-\d{2})(?:\s[^*]*)?\*\*:",
+            spec,
+        )
+    )
+    mapped = [o["clause"] for o in mapping["obligations"]]
+    if len(mapped) != len(set(mapped)) or set(mapped) != clauses:
+        raise RuntimeError("Mapping does not cover exactly the normative clause IDs")
+    if digest(ROOT / "docs/Specification.md") != mapping["specification_sha256"]:
+        raise RuntimeError(
+            "Specification changed: review mapping before regenerating evidence"
+        )
+    for relative, expected in mapping["runtime_source_sha256"].items():
+        if digest(ROOT / relative) != expected:
+            raise RuntimeError(
+                f"Implementation changed: review {relative} and the mapping before rerunning this snapshot audit"
+            )
+    for relative, expected in mapping["catalog_source_sha256"].items():
+        if digest(args.catalog_root / relative) != expected:
+            raise RuntimeError(
+                f"Catalog semantics changed: review {relative} before refreshing mapping"
+            )
+    catalog_check = read_json_command(
+        [sys.executable, str(args.catalog_root / "scripts/catalog.py"), "check"]
+    )
+    if catalog_check["errors"]:
+        raise RuntimeError("Catalog structure invalid")
+    selected_records = [
+        read_json_command(
+            [
+                sys.executable,
+                str(args.catalog_root / "scripts/agent_query.py"),
+                "node",
+                PREFIX + i,
+            ]
+        )
+        for i in CATALOG_IDS
+    ]
+    probes = [
+        optional_ui_import(),
+        relative_lower_bound(),
+        inherited_submit_filter(),
+        journal_interface(),
+    ]
+    temporary_probes = [
+        cross_store_delete,
+        replacement_failure,
+        post_capture_failure,
+        lambda root: post_capture_failure(root, True),
+        metadata,
+        completed_history,
+        exact_save_and_spans,
+    ]
+    for probe in temporary_probes:
+        with TemporaryDirectory(prefix="diary-conformance-") as directory:
+            probes.append(probe(Path(directory)))
+    unit = subprocess.run(
+        [sys.executable, "-B", "-m", "pytest", "-q"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    if unit.returncode != 0:
+        raise RuntimeError("Baseline suite failed: " + unit.stdout + unit.stderr)
+    by_id = {p["id"]: p for p in probes}
+    statuses = []
+    for obligation in mapping["obligations"]:
+        referenced = [by_id[p] for p in obligation.get("probes", [])]
+        status = obligation["inspection_status"]
+        if any(p["status"] == "violated" for p in referenced):
+            status = "violated"
+        statuses.append(
+            dict(
+                id=obligation["id"],
+                clause=obligation["clause"],
+                status=status,
+                probes=obligation.get("probes", []),
+                tests=obligation.get("tests", []),
+                scope=obligation["scope"],
+            )
+        )
+    inputs = [
+        ROOT / "docs/Specification.md",
+        ROOT / "AGENTS.md",
+        ROOT / "diary_agent.py",
+        mapping_path,
+        ROOT / "scripts/conformance/check_implementation.py",
+        *sorted((ROOT / "diary_agent_app").glob("*.py")),
+        *sorted((ROOT / "tests").glob("*.py")),
+    ]
+    evidence = dict(
+        schema_version=1,
+        review_version=mapping["version"],
+        implementation_revision=git("rev-parse", "HEAD"),
+        specification_sha256=digest(ROOT / "docs/Specification.md"),
+        working_tree_status=git("status", "--short"),
+        generated_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
+        python=platform.python_version(),
+        packages={
+            name: importlib.metadata.version(name)
+            for name in ["pytest", "prompt_toolkit"]
+        },
+        dependency_revision=git("rev-parse", "HEAD", directory=ROOT / "deps/HTFS"),
+        input_sha256={str(p.relative_to(ROOT)): digest(p) for p in inputs},
+        catalog_revision=git("rev-parse", "HEAD", directory=args.catalog_root),
+        catalog_check=catalog_check,
+        catalog_backend="dependency-free authoritative Markdown retrieval",
+        catalog_source_sha256=mapping["catalog_source_sha256"],
+        selected_records=selected_records,
+        unit_suite=dict(
+            command="python -B -m pytest -q",
+            returncode=unit.returncode,
+            stdout=unit.stdout,
+            stderr=unit.stderr,
+        ),
+        probes=probes,
+        obligations=statuses,
+        summary=dict(
+            obligations=dict(Counter(o["status"] for o in statuses)),
+            probes=dict(Counter(p["status"] for p in probes)),
+        ),
+        unchecked=mapping["unchecked"],
+        limitations="Static inspection and finite controlled traces; no universal refinement, durability, liveness or live terminal/model proof.",
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n")
+    if args.render_docs:
+        render_docs(mapping, evidence)
+    print(json.dumps(evidence["summary"], indent=2))
+    print(f"Evidence: {args.output}")
+    return 1 if any(o["status"] == "violated" for o in statuses) else 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"Audit inconclusive: {exc}", file=sys.stderr)
+        raise SystemExit(2)

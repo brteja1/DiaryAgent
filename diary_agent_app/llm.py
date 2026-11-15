@@ -63,7 +63,11 @@ def synthesize_entry(
                 "Treat today's existing notes as background context only. Rewrite only the new raw "
                 "update and do not restate, summarize, or copy earlier entries from today's file. "
                 "Do not add headings, preambles, or commentary. If one point needs sub-points, "
-                "keep them as indented nested bullets under that point instead of introducing sections."
+                "keep them as indented nested bullets under that point instead of introducing sections. "
+                "New due metadata must use valid DD-MM-YYYY dates, and new priorities must be "
+                "low, medium, or high. Preserve existing explicit dates and unknown metadata "
+                "as written; do not guess corrections or canonicalize legacy fields. "
+                "Do not expand date words in completed checkboxes."
             ),
         },
         {

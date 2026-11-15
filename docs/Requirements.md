@@ -2,7 +2,7 @@
 
 [Specification.md](Specification.md) is the authoritative behavior contract under D-10. This document is a feature index referencing its stable requirement IDs; it defines no independent behavior. Direct user decisions take precedence and must be recorded in the specification.
 
-The specification distinguishes baseline behavior and approved targets. All twelve recorded decisions are resolved; implementation gaps remain. Passing regressions do not establish conformance to unimplemented targets. See [Design.md](Design.md) for architecture and [the consistency review](specification/ConsistencyReview.md) for scoped mathematical evidence.
+The specification distinguishes baseline behavior and approved targets. All twelve recorded decisions are resolved; integration verification limits remain; see the conformance review. Passing regressions do not establish conformance to unimplemented targets. See [Design.md](Design.md) for architecture and [the consistency review](specification/ConsistencyReview.md) for scoped mathematical evidence.
 
 ## Feature index
 
@@ -35,11 +35,11 @@ The specification distinguishes baseline behavior and approved targets. All twel
 | D-05: identity/duplicate guards | Unique/missing/ambiguous lookup and mutation guards implemented. |
 | D-06: targeted byte preservation | Implemented using exact source spans and byte-preservation tests. |
 | D-07: bundled mandatory HTFS | Implemented and integration-tested; setup is in [HTFS.md](HTFS.md). |
-| D-08: persistence/recovery | Approved; records, receipts and retry actions need implementation. |
-| D-09: cancellation/accepted-empty | Cancel/clear/replace distinguished and tested; failure recovery remains D-08. |
+| D-08: persistence/recovery | Recorded intent, content-first operations, partial/uncertain outcomes, metadata-only retries and retained receipts are implemented and fault-tested. |
+| D-09: cancellation/accepted-empty | Cancel/clear/replace and recorded failure recovery are implemented and tested. |
 | D-10: document authority | Applied in documentation; no application behavior changed. |
-| D-11: TODO metadata interpretation | Open-task proposal expansion uses `DD-MM-YYYY`; structured metadata validation/presentation remains pending. |
-| D-12: unattended/stale TODO selection | Selection guards and read-only unattended listing implemented; cross-file write-failure recovery remains D-08. |
+| D-11: TODO metadata interpretation | Open-task proposal dates use `DD-MM-YYYY`; generated fields are validated; legacy/unvalidated fields retain their spelling and expose validity status. |
+| D-12: unattended/stale TODO selection | Selection guards and read-only unattended listing implemented; cross-file failures retain partial/uncertain records without replaying content. |
 
 ## Verification
 

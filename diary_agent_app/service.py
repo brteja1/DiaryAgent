@@ -11,7 +11,6 @@ from collections.abc import Callable, Sequence
 from . import core, llm
 from .core import (
     TODO_RE,
-    DATE_FMT,
     tokenize,
     normalize_todo_text,
     shortlist_similar_tasks,
@@ -20,13 +19,13 @@ from .core import (
     parse_explicit_day_input,
     format_entry_title,
     build_entry_search_text,
-    resource_tags_for_specs,
     lines_are_redundant,
     todo_reference_date,
     normalize_todo_dates,
 )
 from .htfs_adapter import HTFSAdapter
 from .markdown import DiaryDocument, read_markdown, write_markdown
+from .persistence import DiaryPersistence
 from .models import (
     DiaryEntryOption,
     DiarySection,
@@ -42,6 +41,20 @@ class DiaryAgent:
     def __init__(self, diary_dir: Path, model: str | None) -> None:
         self.diary_dir = diary_dir
         self.model = model.strip() if isinstance(model, str) and model.strip() else None
+        self.last_operation_id: str | None = None
+
+    def persistence(self) -> DiaryPersistence:
+        adapter = HTFSAdapter(self.diary_dir)
+        adapter.ensure_initialized()
+        return DiaryPersistence(self.diary_dir, adapter)
+
+    def _write_content(
+        self, changes: dict[Path, str], kind: str, delete: DiarySection | None = None
+    ) -> None:
+        operation = self.persistence().content_change(
+            changes, kind, write_markdown, delete=delete
+        )
+        self.last_operation_id = operation.id
 
     @property
     def llm_enabled(self) -> bool:
@@ -52,7 +65,7 @@ class DiaryAgent:
 
     def today_file(self, date: dt.date | None = None) -> Path:
         date = date or dt.date.today()
-        return self.diary_dir / f"{date.strftime(DATE_FMT)}.md"
+        return self.diary_dir / f"{core.format_diary_date(date)}.md"
 
     def day_file(self, day_text: str | None = None) -> Path:
         if day_text is None:
@@ -160,9 +173,11 @@ class DiaryAgent:
         return self.append_entry_verbatim(entry, day_text)
 
     def prepare_rewrite_for_review(
-        self, entry: str, day_text: str | None = None
+        self, entry: str, day_text: str | None = None, *, original: str | None = None
     ) -> str:
         entry = normalize_todo_dates(entry, todo_reference_date(day_text=day_text))
+        if original is not None:
+            core.validate_generated_todo_metadata(entry, original)
         existing = self.read_day_context(day_text)
         return "\n".join(self.filter_new_entry_lines(entry, existing)).strip()
 
@@ -180,7 +195,9 @@ class DiaryAgent:
             separator = "\n" if existing.endswith("\n") else "\n\n"
         ending = "" if body.endswith("\n") else "\n"
         heading = self.unique_entry_timestamp_heading(path)
-        write_markdown(path, f"{existing}{separator}{heading}\n\n{body}{ending}")
+        self._write_content(
+            {path: f"{existing}{separator}{heading}\n\n{body}{ending}"}, "capture"
+        )
         return path, True
 
     def extract_entry_lines(self, entry: str) -> list[str]:
@@ -192,8 +209,7 @@ class DiaryAgent:
 
     def filter_new_entry_lines(self, entry: str, existing: str) -> list[str]:
         existing_lines = self.extract_entry_lines(existing)
-        existing_texts = [self.entry_line_text(line) for line in existing_lines]
-        accepted_texts: list[str] = []
+        accepted_lines: list[str] = []
         new_lines: list[str] = []
         for raw_line in entry.strip().splitlines():
             line = raw_line.rstrip()
@@ -204,14 +220,31 @@ class DiaryAgent:
             if not line_text:
                 continue
 
-            if any(lines_are_redundant(line_text, text) for text in existing_texts):
+            if any(
+                self._proposal_lines_match(line, old)
+                for old in [*existing_lines, *accepted_lines]
+            ):
                 continue
-            if any(lines_are_redundant(line_text, text) for text in accepted_texts):
-                continue
-
-            accepted_texts.append(line_text)
+            accepted_lines.append(line)
             new_lines.append(line)
         return new_lines
+
+    def _proposal_lines_match(self, candidate: str, existing: str) -> bool:
+        task = TODO_RE.match(candidate)
+        previous = TODO_RE.match(existing)
+        if task is not None:
+            # Completed history and ordinary notes cannot stand for an open task.
+            if (
+                task.group("state") != " "
+                or previous is None
+                or previous.group("state") != " "
+            ):
+                return False
+        elif previous is not None:
+            return False
+        return lines_are_redundant(
+            self.entry_line_text(candidate), self.entry_line_text(existing)
+        )
 
     def entry_line_text(self, line: str) -> str:
         if line.lstrip().startswith("#"):
@@ -348,8 +381,8 @@ class DiaryAgent:
                 lines[number - 1] = core.todo_with_state(lines[number - 1], "x")
                 updates += 1
             changes[file_path] = "".join(lines)
-        for file_path, content in changes.items():
-            write_markdown(file_path, content)
+        if changes:
+            self._write_content(changes, "complete_todos")
         return updates
 
     def toggle_todo(self, file_path: Path, line_number: int) -> str | None:
@@ -363,7 +396,7 @@ class DiaryAgent:
         state = " " if match.group("state") != " " else "x"
         lines[line_number - 1] = core.todo_with_state(lines[line_number - 1], state)
         content = "".join(lines)
-        write_markdown(file_path, content)
+        self._write_content({file_path: content}, "toggle_todo")
         return content.rstrip()
 
     def update_section(
@@ -372,7 +405,7 @@ class DiaryAgent:
         document = DiaryDocument.parse(read_markdown(file_path))
         updated = document.replace_body(heading, new_body)
         if updated is not None:
-            write_markdown(file_path, updated)
+            self._write_content({file_path: updated}, "edit_section")
         return updated.rstrip() if updated is not None else None
 
     def delete_section(self, file_path: Path, heading: str) -> str | None:
@@ -381,23 +414,25 @@ class DiaryAgent:
         if updated is None:
             return None
         section = DiarySection(file_path, heading, "")
-        # Cross-store recovery remains the separately tracked PERSIST-01–05 target.
-        HTFSAdapter(self.diary_dir).delete_section_resource(section)
-        write_markdown(file_path, updated)
+        self._write_content({file_path: updated}, "delete_section", delete=section)
         return updated.rstrip()
 
-    def set_section_tags(self, section: DiarySection, tags: list[str]) -> list[str]:
+    def set_section_tags(
+        self, section: DiarySection, tags: list[str], *, additive: bool = False
+    ) -> list[str]:
         """Clear and set new tags for a section."""
         resolved = self.section_for_id(section.section_id)
         if resolved is None:
             raise RuntimeError(f"No section found for {section.section_id}.")
         section = resolved
-        adapter = HTFSAdapter(self.diary_dir)
-        adapter.clear_section_tags(section)
-        if tags:
-            adapter.add_tags(tags)
-            adapter.tag_section(section, resource_tags_for_specs(tags))
-        return adapter.section_tags(section)
+        store = self.persistence()
+        operation = store.tag_change(section, tags, additive=additive)
+        self.last_operation_id = operation.id
+        return list(operation.tags[0].intended.tags)
+
+    def delete_taxonomy_tags(self, names: list[str]) -> None:
+        operation = self.persistence().delete_taxonomy(names)
+        self.last_operation_id = operation.id
 
     def search(
         self,

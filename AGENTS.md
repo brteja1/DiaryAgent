@@ -8,7 +8,7 @@ Subject to direct user instructions, [docs/Specification.md](docs/Specification.
 
 ## Current work status
 
-D-01 through D-12 are decided in specification v1.0. D-07's mandatory bundled HTFS integration is implemented and tested. Save/consent, calendar navigation, identity guards, byte preservation, tag-selection outcomes and TODO selection guards now have acceptance coverage. D-08 recovery and D-11 structured metadata validation/presentation remain pending. Passing regressions do not establish full conformance.
+D-01 through D-12 are decided in specification v1.0. D-07's mandatory bundled HTFS integration is implemented and tested. Save/consent, calendar navigation, identity guards, byte preservation, tag-selection outcomes and TODO selection guards now have acceptance coverage. D-08 recovery and D-11 metadata validation/preservation now have implementation and fault-injection coverage. See `docs/conformance/ConformanceReview.md` for repaired findings and the remaining unchecked integration scope. Passing regressions do not establish full conformance.
 
 Follow the decided contract when fixing an affected workflow, rather than treating a known contradiction as a requirement. Keep changes reviewable and identify the pending target they address.
 
@@ -16,7 +16,8 @@ Follow the decided contract when fixing an affected workflow, rather than treati
 
 - `diary_agent.py`: stable entrypoint. `cli.py` owns parsing/startup, `commands.py` workflows, `service.py` domain/storage, and `markdown.py` exact section spans.
 - `diary_agent_app/core.py`: config/parsing I/O, date/TODO helpers, retrieval and shortlisting.
-- `diary_agent_app/models.py`: shared records.
+- `diary_agent_app/models.py`: shared records. `todo_metadata.py` interprets raw fields without rewriting them.
+- `diary_agent_app/persistence.py`: operation intent, truthful outcomes, content-first changes, metadata-only retry and completion/resolution receipts. All operational mutations use this coordinator; HTFS setup/preflight remains separate.
 - `diary_agent_app/llm.py`: calls/prompts for LLM-01's five tasks.
 - `diary_agent_app/htfs_adapter.py`: the only HTFS integration boundary.
 - `diary_agent_app/ui.py`: editor, proposal review, dialogs and completion. `viewer.py` owns the viewer/picker.
@@ -59,8 +60,10 @@ Update focused behavior tests when behavior changes; see [docs/Testing.md](docs/
 
 ```bash
 python -m py_compile diary_agent.py diary_agent_app/core.py diary_agent_app/llm.py diary_agent_app/ui.py
-pytest -q tests/test_diary_agent.py tests/test_contracts.py
+pytest -q tests/test_diary_agent.py tests/test_contracts.py tests/test_recovery.py
 ```
+
+After re-reviewing changed runtime/catalog representations, update `docs/conformance/mapping.json` and run `python scripts/conformance/check_implementation.py --render-docs`. Never refresh semantic fingerprints without reviewing their mapped obligations.
 
 For changed contracts/encodings, update model/review and regenerate evidence:
 

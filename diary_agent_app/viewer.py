@@ -19,6 +19,7 @@ from .ui import (
     HTML,
     KeyBindings,
     button_dialog,
+    message_dialog,
     DIALOG_STYLE,
     require_prompt_toolkit,
     _prompt_should_run_in_thread,
@@ -40,6 +41,7 @@ def show_diary_entry(
     get_all_tags=None,
     suggest_tags=None,
     delete_section=None,
+    reload_entry=None,
 ) -> None:
     require_prompt_toolkit()
 
@@ -169,6 +171,29 @@ def show_diary_entry(
         text_area.text = inject_tags(new_content, tags_data)
         text_area.buffer.cursor_position = 0
 
+    async def perform_change(action, refresh):
+        """Refresh confirmed content even when metadata reconciliation fails."""
+        try:
+            result = action()
+            refresh(result)
+        except Exception as exc:
+            if reload_entry is not None:
+                try:
+                    content = reload_entry(frame.title)
+                    raw_content_state["body"] = content
+                    text_area.text = content
+                except Exception:
+                    pass  # Still report the operation error if refresh is unavailable.
+            message = str(exc)
+            await run_in_terminal(
+                lambda: message_dialog(
+                    title="Operation needs attention",
+                    text=message,
+                    style=DIALOG_STYLE,
+                ).run(in_thread=_prompt_should_run_in_thread())
+            )
+            return
+
     def move_to_entry(loader) -> None:
         if loader is None:
             return
@@ -197,17 +222,18 @@ def show_diary_entry(
         event.app.invalidate()
 
     @bindings.add("space", filter=~picker_visible)
-    def _(event) -> None:
+    async def _(event) -> None:
         if toggle_todo is None:
             return
         line_no = text_area.buffer.document.cursor_position_row + 1
-        new_content = toggle_todo(frame.title, line_no)
-        if new_content is not None:
-            cursor_pos = text_area.buffer.cursor_position
-            raw_content_state["body"] = new_content
-            tags_data = get_tags(frame.title) if get_tags else {}
-            text_area.text = inject_tags(new_content, tags_data)
-            text_area.buffer.cursor_position = cursor_pos
+        cursor_pos = text_area.buffer.cursor_position
+
+        def refresh(new_content):
+            if new_content is not None:
+                update_view(frame.title, new_content)
+                text_area.buffer.cursor_position = cursor_pos
+
+        await perform_change(lambda: toggle_todo(frame.title, line_no), refresh)
 
     @bindings.add("e", filter=~picker_visible)
     async def _(event) -> None:
@@ -235,9 +261,14 @@ def show_diary_entry(
         if result:
             new_body, _ = result
             if new_body:
-                updated_content = update_section(frame.title, heading, new_body)
-                if updated_content:
-                    update_view(frame.title, updated_content)
+                await perform_change(
+                    lambda: update_section(frame.title, heading, new_body),
+                    lambda content: (
+                        update_view(frame.title, content)
+                        if content is not None
+                        else None
+                    ),
+                )
 
     @bindings.add("t", filter=~picker_visible)
     async def _(event) -> None:
@@ -264,8 +295,10 @@ def show_diary_entry(
         )
 
         if new_tags is not None and new_tags != current_section_tags:
-            set_tags(frame.title, heading, new_tags)
-            update_view(frame.title, raw_content_state["body"])
+            await perform_change(
+                lambda: set_tags(frame.title, heading, new_tags),
+                lambda result: update_view(frame.title, raw_content_state["body"]),
+            )
 
     @bindings.add("d", filter=~picker_visible)
     async def _(event) -> None:
@@ -293,9 +326,12 @@ def show_diary_entry(
         if not confirmed:
             return
 
-        updated_content = delete_section(frame.title, heading)
-        if updated_content is not None:
-            update_view(frame.title, updated_content)
+        await perform_change(
+            lambda: delete_section(frame.title, heading),
+            lambda content: (
+                update_view(frame.title, content) if content is not None else None
+            ),
+        )
 
     query_input.buffer.on_text_changed += lambda _event: (
         picker_state.__setitem__("selected", 0)

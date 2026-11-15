@@ -1,0 +1,1440 @@
+{
+  "schema_version": 1,
+  "review_version": "1.0",
+  "implementation_revision": "c6432d34f86044ac2984b27600ab18a522b33f12",
+  "specification_sha256": "b5df9651f89392f58cad73f621b8813a8a3833ad88c972221f03c35e80279c12",
+  "working_tree_status": "? deps/HTFS\n?? .codex\n?? .vscode/\n?? __pycache__/\n?? diary_agent\n?? diary_agent_app/__pycache__/\n?? docs/Android_App_Plan.md\n?? docs/conformance/\n?? docs/diary_agent_architecture.html\n?? scripts/conformance/\n?? scripts/specification/__pycache__/\n?? tests/__pycache__/",
+  "generated_at_utc": "2026-11-14T12:53:18.630857+00:00",
+  "python": "3.13.9",
+  "packages": {
+    "pytest": "8.4.2",
+    "prompt_toolkit": "3.0.52"
+  },
+  "dependency_revision": "fa82438b63e6b9daa146cd05812b062b0beffd7c",
+  "input_sha256": {
+    "docs/Specification.md": "b5df9651f89392f58cad73f621b8813a8a3833ad88c972221f03c35e80279c12",
+    "AGENTS.md": "1a1fee6138ef97504abc3bcae0f5ad9ab20a381731ff3c1e104f302884315168",
+    "diary_agent.py": "c113fc9376bbd00c714841b398dde2b8a60712879872d6a5762f90b545af5cfa",
+    "docs/conformance/mapping.json": "a4ccb85b5a9db4fcd72b5a03dbacf09ff5647dfb8ce181ec8820fb26d1edffec",
+    "scripts/conformance/check_implementation.py": "7ff406ffc9969707e0bb71ab6fbf159c32383314596c17cb693fa61034ff9851",
+    "diary_agent_app/__init__.py": "62842899d354e45eb9fe18aa91d436fdb1502a9818397a4d2213b3fd251143b6",
+    "diary_agent_app/cli.py": "051a1d79fc272e81422a6285d4a1237a94615bc5b7f7366ec27d0b47533cf1ce",
+    "diary_agent_app/commands.py": "3906e60992ae9c5655b59e1921fca69f60ac71ae85af6b1153ce1f75948e8f11",
+    "diary_agent_app/core.py": "0e62722f6ba181c99f1d1ba930d0f3ff431e0d85cabda28c3903bd886318d9c3",
+    "diary_agent_app/htfs_adapter.py": "64b1146781a37161df55ff2a9c408750fc76c26d0fc0d522b730387f52fa11b7",
+    "diary_agent_app/llm.py": "969ffa3aedd07a93b83cdbbf0627c417a239b2624dd8d47682095d3c15d5e9d9",
+    "diary_agent_app/markdown.py": "fc73eaa0f0d3cc97faa305997b3d5aca18992f9d0d76de19fb064b4c9836b411",
+    "diary_agent_app/models.py": "ec69ab631749236ce7902fbe8b83d8456fbb59668da8f5d6788a7a9091d77af5",
+    "diary_agent_app/service.py": "dedda27b6669df000b7349c7251a23aca721ccf3d73cebed494c0dad37750373",
+    "diary_agent_app/ui.py": "6a71620ebc457bc17d5d35a62610aa4b16c4b37534f80326800348e3442fc8d0",
+    "diary_agent_app/viewer.py": "7d58cd982915c6906374cf606fe9eb185b31203cce0e93dc0c14e8fc2d1ceaac",
+    "tests/conftest.py": "9f76404ad1ae8515ac7ab8d84517f432e2374da7bc953d336c3268fd44c6bc9c",
+    "tests/test_contracts.py": "4744591181f9df405461e22096deabe44e24328a6f67d65e19f989cdaf0ab697",
+    "tests/test_diary_agent.py": "9edf72efd54d04964b08a3c4de5927f660412579b0fb85968e551dfc27274864"
+  },
+  "catalog_revision": "15bbc590a8c18289464cddaeef4ba5fdb323fc2a",
+  "catalog_check": {
+    "concepts": 222,
+    "nodes": 2160,
+    "errors": []
+  },
+  "catalog_backend": "dependency-free authoritative Markdown retrieval",
+  "catalog_source_sha256": {
+    "concepts/HoareTriple.md": "3bb69dea989349b7cd7b189a43464f10d20aef6a48eed3b1c86f08d887fc5e99",
+    "concepts/TransitionSystem.md": "ef94e179f22c87ae0e353b42070c51fe1c64c1840dc1f603184f5d18d18b9b26",
+    "concepts/TotalOrder.md": "0a869cf0ada52de382103235483d280191ca4dcef897aa18b2f28ce9b8257b57",
+    "concepts/OptionType.md": "e05b66c4c249423f2c4e87ca8a9c1fa47902872f7b478ed6d80a39203ff58dc2",
+    "concepts/EquivalenceRelation.md": "d2c7f7cb61aaab107d6cab200e07ff8a4fd6ee2bc50670991049bfb5b542421b",
+    "data/shared.json": "f3c72cc4d38e667202a6b3ae5ca17f23b43fec563c103e922c2e4b90f94dbe68"
+  },
+  "selected_records": [
+    {
+      "id": "urn:csabs:concept/HoareTriple",
+      "type": "Concept",
+      "shortForm": "HoareTriple",
+      "fullName": "Hoare Triple",
+      "category": [
+        "urn:csabs:category/programming-semantics"
+      ],
+      "kind": "urn:csabs:kind/semantic-model",
+      "definition": "A partial-correctness contract: starting in a state satisfying P, every terminating execution of C ends in a state satisfying Q.",
+      "notation": "{P} C {Q} iff ∀s,t: P(s)∧C(s,t)⇒Q(t)",
+      "requiresConcept": [
+        "urn:csabs:concept/PredicateLogic",
+        "urn:csabs:concept/Relation"
+      ],
+      "coverageStatus": "basis-reviewed",
+      "verificationObligation": [
+        "Partial correctness does not imply termination. State the command relation and treatment of faults.",
+        "Use the stated carriers, equality, domain restrictions and semantic conventions; alternative conventions require an explicit variant."
+      ],
+      "axiomBasis": "Selected presentation: A partial-correctness contract: starting in a state satisfying P, every terminating execution of C ends in a state satisfying Q. Governing rules: A Hoare triple constrains every normally terminating behavior; it does not require termination. Sequential command semantics joins the intermediate state.",
+      "basisKind": "defined-structure",
+      "basisScope": "Defining interface and selected derived results for the operations listed in this entry. Not an enumeration of all consequences or all alternative foundations.",
+      "reviewStatus": "editorial basis review; no machine-checked mathematical proof",
+      "source": [
+        "urn:csabs:source/sf-hoare"
+      ],
+      "formulationScope": "model",
+      "leanModelLimitations": "Selected carrier/interface interpretation only. No blanket witness for all recorded operations, axioms, laws or theorems; consult binders and individual witness mappings.",
+      "mathematicalFormulation": "For C⊆S×S and predicates P,Q⊆S, {P}C{Q} ⇔ ∀s,t, P(s)∧C(s,t)⇒Q(t). This is partial correctness: absent terminating outcomes satisfy the implication vacuously."
+    },
+    {
+      "id": "urn:csabs:operation/HoareTriple-basis-holds",
+      "type": "Operation",
+      "name": "holds",
+      "signature": "holds : Predicate×Command×Predicate→Prop",
+      "description": "Returns the partial-correctness assertion defined by terminating command executions.",
+      "concept": "urn:csabs:concept/HoareTriple"
+    },
+    {
+      "id": "urn:csabs:concept/TransitionSystem",
+      "type": "Concept",
+      "shortForm": "TransitionSystem",
+      "fullName": "Transition System",
+      "category": [
+        "urn:csabs:category/programming-semantics",
+        "urn:csabs:category/behavior"
+      ],
+      "kind": "urn:csabs:kind/semantic-model",
+      "definition": "States, initial states, and a transition relation describe allowed executions.",
+      "notation": "T=(S,I,→); I⊆S; →⊆S×S",
+      "requiresConcept": [
+        "urn:csabs:concept/Relation"
+      ],
+      "coverageStatus": "basis-reviewed",
+      "verificationObligation": [
+        "Instantiate carrier, equality, and stated semantic conventions before using this entry.",
+        "Use the stated carriers, equality, domain restrictions and semantic conventions; alternative conventions require an explicit variant."
+      ],
+      "axiomBasis": "Selected presentation: States, initial states, and a transition relation describe allowed executions. Governing rules: A transition system has initial states and an arbitrary next-state relation; determinism and totality are additional properties. Reachable states are the least set containing the initial states and closed under Next.",
+      "basisKind": "defined-structure",
+      "basisScope": "Defining interface and selected derived results for the operations listed in this entry. Not an enumeration of all consequences or all alternative foundations.",
+      "reviewStatus": "editorial basis review; no machine-checked mathematical proof",
+      "provenanceStatus": "legacy-source-missing",
+      "relatedConcept": [
+        "urn:csabs:concept/LabelledTransitionSystem",
+        "urn:csabs:concept/KripkeStructure"
+      ],
+      "formulationScope": "model",
+      "leanModelLimitations": "Selected carrier/interface interpretation only. No blanket witness for all recorded operations, axioms, laws or theorems; consult binders and individual witness mappings.",
+      "mathematicalFormulation": "A transition system is (S,I,→) with I⊆S and →⊆S×S. reachable(s) ⇔ ∃i∈I,i→*s, where →* is reflexive-transitive closure. Initial states and transition successors may be absent."
+    },
+    {
+      "id": "urn:csabs:operation/TransitionSystem-post",
+      "type": "Operation",
+      "name": "post",
+      "signature": "post : 𝒫(S)→𝒫(S)",
+      "description": "Returns all one-step successors of any state in the input subset.",
+      "concept": "urn:csabs:concept/TransitionSystem"
+    },
+    {
+      "id": "urn:csabs:concept/TotalOrder",
+      "type": "Concept",
+      "shortForm": "TotalOrder",
+      "fullName": "Total Order",
+      "category": [
+        "urn:csabs:category/order"
+      ],
+      "kind": "urn:csabs:kind/relation",
+      "definition": "A partial order in which every two elements are comparable.",
+      "notation": "∀x,y∈A: x≤y ∨ y≤x",
+      "requiresConcept": [
+        "urn:csabs:concept/PartialOrder"
+      ],
+      "coverageStatus": "basis-reviewed",
+      "verificationObligation": [
+        "Instantiate carrier, equality, and stated semantic conventions before using this entry.",
+        "Use the stated carriers, equality, domain restrictions and semantic conventions; alternative conventions require an explicit variant."
+      ],
+      "axiomBasis": "Selected presentation: A partial order in which every two elements are comparable. Governing rules: The order is reflexive. The order is transitive. Mutual ordering implies equality. Any pair is comparable.",
+      "basisKind": "defined-structure",
+      "basisScope": "Defining interface and selected derived results for the operations listed in this entry. Not an enumeration of all consequences or all alternative foundations.",
+      "reviewStatus": "editorial basis review; no machine-checked mathematical proof",
+      "source": [
+        "urn:csabs:source/mathlib-order"
+      ],
+      "specializationOf": [
+        "urn:csabs:concept/PartialOrder"
+      ],
+      "specializationNote": "Keep the same carrier and relation; comparability of every pair is the additional constraint.",
+      "formulationScope": "model",
+      "leanModelLimitations": "Selected carrier/interface interpretation only. No blanket witness for all recorded operations, axioms, laws or theorems; consult binders and individual witness mappings.",
+      "mathematicalFormulation": "A total order is a partial order with ∀a,b,a≤b∨b≤a. The selected Lean LinearOrder also supplies decidable equality and comparisons."
+    },
+    {
+      "id": "urn:csabs:operation/TotalOrder-basis-le",
+      "type": "Operation",
+      "name": "le",
+      "signature": "le : A×A→Prop",
+      "description": "Returns the total-order comparison proposition.",
+      "concept": "urn:csabs:concept/TotalOrder"
+    },
+    {
+      "id": "urn:csabs:axiom/TotalOrder-transitive",
+      "type": "Axiom",
+      "name": "transitive",
+      "statement": "The order is transitive.",
+      "formalStatement": "x≤y ∧ y≤z ⇒ x≤z",
+      "appliesTo": [
+        "urn:csabs:concept/TotalOrder"
+      ],
+      "assumptions": [
+        "All variables range over the carriers and semantic conventions specified in this concept."
+      ],
+      "ruleRole": "defining-rule",
+      "reviewStatus": "editorial-summary; not machine-proved",
+      "notationLanguage": "informal mathematical Unicode",
+      "provenanceStatus": "legacy-source-missing"
+    },
+    {
+      "id": "urn:csabs:concept/OptionType",
+      "type": "Concept",
+      "shortForm": "OptionType",
+      "fullName": "Option Type",
+      "category": [
+        "urn:csabs:category/types"
+      ],
+      "kind": "urn:csabs:kind/data-type",
+      "definition": "A value that is either absent or a present payload, using a tag to distinguish absence from every payload.",
+      "notation": "Option(A)=1+A; None or Some(a)",
+      "requiresConcept": [
+        "urn:csabs:concept/SumType",
+        "urn:csabs:concept/UnitType"
+      ],
+      "coverageStatus": "basis-reviewed",
+      "verificationObligation": [
+        "Instantiate type parameters and operation domains.",
+        "Function equality here is extensional; translating to intensional type theory may require function extensionality.",
+        "Account separately for nontermination, exceptions, mutation, or untagged representation in concrete software.",
+        "Use the stated carriers, equality, domain restrictions and semantic conventions; alternative conventions require an explicit variant."
+      ],
+      "axiomBasis": "Extensional total set-like types: constructor/eliminator beta and eta equations; operation-definition equations where specified. Equality of functions is pointwise; no divergence, effects, or bottom values.",
+      "source": [
+        "urn:csabs:source/awodey-types"
+      ],
+      "basisScope": "Defining interface and selected derived results for the operations listed in this entry. Not an enumeration of all consequences or all alternative foundations.",
+      "reviewStatus": "editorial basis review; no machine-checked mathematical proof",
+      "basisKind": "extensional-type-theory",
+      "specializationOf": [
+        "urn:csabs:concept/SumType"
+      ],
+      "specializationNote": "Instantiate SumType at UnitType and A: None corresponds to inl(⋆), Some(a) to inr(a), with the corresponding case eliminator. This is an explicit tagged-type identification.",
+      "formulationScope": "model",
+      "leanModelLimitations": "Selected carrier/interface interpretation only. No blanket witness for all recorded operations, axioms, laws or theorems; consult binders and individual witness mappings.",
+      "mathematicalFormulation": "Option(A)=1+A with constructors none and some(a). some(a)=some(b) ⇔ a=b; none≠some(a). Case analysis distinguishes absence from every present value."
+    },
+    {
+      "id": "urn:csabs:operation/option-none",
+      "type": "Operation",
+      "name": "None",
+      "signature": "None : Option(A)",
+      "description": "Constructs absence, distinct from every present value.",
+      "concept": "urn:csabs:concept/OptionType",
+      "source": [
+        "urn:csabs:source/awodey-types"
+      ]
+    },
+    {
+      "id": "urn:csabs:operation/OptionType-some",
+      "type": "Operation",
+      "name": "some",
+      "signature": "Some : A→Option(A)",
+      "description": "Constructs a present value.",
+      "concept": "urn:csabs:concept/OptionType"
+    },
+    {
+      "id": "urn:csabs:operation/option-case",
+      "type": "Operation",
+      "name": "optionCase",
+      "signature": "optionCase : C×(A→C)×Option(A)→C",
+      "description": "Returns the default value for None and applies a branch to a Some payload.",
+      "concept": "urn:csabs:concept/OptionType",
+      "source": [
+        "urn:csabs:source/awodey-types"
+      ]
+    },
+    {
+      "id": "urn:csabs:axiom/option-case-none",
+      "type": "Axiom",
+      "name": "option-case-none",
+      "statement": "Case analysis of absence returns the default.",
+      "formalStatement": "optionCase(c,f,None)=c",
+      "assumptions": [
+        "Extensional total set-like types; all displayed functions total and correctly typed."
+      ],
+      "appliesTo": [
+        "urn:csabs:concept/OptionType"
+      ],
+      "dependsOn": [
+        "urn:csabs:operation/option-case",
+        "urn:csabs:operation/option-none"
+      ],
+      "source": [
+        "urn:csabs:source/awodey-types"
+      ],
+      "reviewStatus": "editorial-summary; not machine-proved",
+      "notationLanguage": "informal mathematical Unicode",
+      "ruleRole": "structure-law"
+    },
+    {
+      "id": "urn:csabs:axiom/option-case-some",
+      "type": "Axiom",
+      "name": "option-case-some",
+      "statement": "Case analysis of a present value applies the branch.",
+      "formalStatement": "optionCase(c,f,Some(a))=f(a)",
+      "assumptions": [
+        "Extensional total set-like types; all displayed functions total and correctly typed."
+      ],
+      "appliesTo": [
+        "urn:csabs:concept/OptionType"
+      ],
+      "dependsOn": [
+        "urn:csabs:operation/option-case"
+      ],
+      "source": [
+        "urn:csabs:source/awodey-types"
+      ],
+      "reviewStatus": "editorial-summary; not machine-proved",
+      "notationLanguage": "informal mathematical Unicode",
+      "ruleRole": "structure-law"
+    },
+    {
+      "id": "urn:csabs:source/awodey-types",
+      "type": "Source",
+      "label": "Steve Awodey: Notes on Type Theory",
+      "url": "https://awodey.github.io/typetheory/notes/typetheory.pdf",
+      "sourceRole": "reference",
+      "provenanceNote": "Supports the mathematical presentation; local claim names and notation are editorial, not verbatim library declarations."
+    },
+    {
+      "id": "urn:csabs:source/sf-hoare",
+      "type": "Source",
+      "label": "Software Foundations: Hoare Logic",
+      "url": "https://softwarefoundations.cis.upenn.edu/plf-current/Hoare.html",
+      "sourceRole": "reference-for-selected-basis",
+      "provenanceNote": "Consulted for the selected presentation; local equations and proof sketches are editorial and are not extracted formal proofs."
+    },
+    {
+      "id": "urn:csabs:concept/EquivalenceRelation",
+      "type": "Concept",
+      "shortForm": "EquivalenceRelation",
+      "fullName": "Equivalence relation",
+      "category": [
+        "urn:csabs:category/foundations"
+      ],
+      "kind": "urn:csabs:kind/relation",
+      "definition": "A homogeneous relation that is reflexive, symmetric, and transitive.",
+      "notation": "~ ⊆ A×A; ∀a:a~a; a~b⇒b~a; (a~b∧b~c)⇒a~c.",
+      "relatedConcept": [
+        "urn:csabs:concept/Relation",
+        "urn:csabs:concept/Partition"
+      ],
+      "coverageStatus": "basis-reviewed",
+      "requiresConcept": [],
+      "verificationObligation": [
+        "Use the stated carriers, equality, domain restrictions and semantic conventions; alternative conventions require an explicit variant."
+      ],
+      "axiomBasis": "Selected presentation: A homogeneous relation that is reflexive, symmetric, and transitive. Governing rules: Every element is related to itself. Related pairs remain related when reversed. Relatedness composes transitively. The class of an element comprises all elements equivalent to it.",
+      "basisKind": "defined-structure",
+      "basisScope": "Defining interface and selected derived results for the operations listed in this entry. Not an enumeration of all consequences or all alternative foundations.",
+      "reviewStatus": "editorial basis review; no machine-checked mathematical proof",
+      "provenanceStatus": "legacy-source-missing",
+      "specializationOf": [
+        "urn:csabs:concept/Preorder"
+      ],
+      "specializationNote": "Keep the same homogeneous relation and carrier; reflexivity and transitivity give a preorder, with symmetry as an additional constraint.",
+      "formulationScope": "model",
+      "leanModelLimitations": "Selected carrier/interface interpretation only. No blanket witness for all recorded operations, axioms, laws or theorems; consult binders and individual witness mappings.",
+      "mathematicalFormulation": "A setoid is (A,≈) with ∀a, a≈a; ∀a b, a≈b⇒b≈a; ∀a b c, a≈b∧b≈c⇒a≈c. Relation equivalence need not coincide with equality of representatives."
+    },
+    {
+      "id": "urn:csabs:operation/EquivalenceRelation-basis-class",
+      "type": "Operation",
+      "name": "class",
+      "signature": "class : A→𝒫(A)",
+      "description": "Returns the equivalence class [a]={x∈A:x~a}.",
+      "concept": "urn:csabs:concept/EquivalenceRelation"
+    },
+    {
+      "id": "urn:csabs:axiom/equivalence-transitive",
+      "type": "Axiom",
+      "statement": "Relatedness composes transitively.",
+      "formalStatement": "∀a,b,c∈A: (a~b∧b~c)⇒a~c",
+      "appliesTo": [
+        "urn:csabs:concept/EquivalenceRelation"
+      ],
+      "reviewStatus": "editorial-summary; not machine-proved",
+      "notationLanguage": "informal mathematical Unicode",
+      "ruleRole": "structure-law",
+      "name": "equivalence-transitive",
+      "assumptions": [
+        "Use the linked concept’s explicit basis and carrier conventions."
+      ],
+      "provenanceStatus": "legacy-source-missing"
+    }
+  ],
+  "unit_suite": {
+    "command": "python -B -m pytest -q",
+    "returncode": 0,
+    "stdout": "........................................................................ [ 67%]\n..................................                                       [100%]\n106 passed in 0.44s\n",
+    "stderr": ""
+  },
+  "probes": [
+    {
+      "id": "P01-optional-ui-import",
+      "obligations": [
+        "O-CAP-08",
+        "O-VIEW-02",
+        "O-QUAL-03"
+      ],
+      "expected": "CLI imports so documented no-toolkit workflows can run",
+      "actual": {
+        "returncode": 1,
+        "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 7, in <module>\n    from diary_agent_app import cli\n  File \"/linuxdev/github/DiaryAgent/diary_agent_app/cli.py\", line 9, in <module>\n    from . import commands\n  File \"/linuxdev/github/DiaryAgent/diary_agent_app/commands.py\", line 26, in <module>\n    from .viewer import show_diary_entry\n  File \"/linuxdev/github/DiaryAgent/diary_agent_app/viewer.py\", line 7, in <module>\n    from .ui import (\n    ...<19 lines>...\n    )\nImportError: cannot import name 'run_in_terminal' from 'diary_agent_app.ui' (/linuxdev/github/DiaryAgent/diary_agent_app/ui.py)"
+      },
+      "assessment_method": "observation_comparison",
+      "status": "violated"
+    },
+    {
+      "id": "P07-relative-year-one",
+      "obligations": [
+        "O-DATA-01",
+        "O-DATA-04"
+      ],
+      "expected": "01_01_0001",
+      "actual": {
+        "relative_input": "-739933",
+        "parsed": "01_01_1",
+        "written_filename": "01_01_1.md"
+      },
+      "assessment_method": "observation_comparison",
+      "status": "violated"
+    },
+    {
+      "id": "P09-inherited-submit-filter",
+      "obligations": [
+        "O-CAP-04"
+      ],
+      "expected": "No inherited Meta+Enter submit binding is enabled while read-only",
+      "actual": {
+        "binding_count": 1,
+        "enabled": []
+      },
+      "assessment_method": "observation_comparison",
+      "status": "supported_within_scope"
+    },
+    {
+      "id": "P10-recovery-interface",
+      "obligations": [
+        "O-PERSIST-04"
+      ],
+      "expected": "Explicit operation-targeted recovery/receipt actions (syntax is an implementation choice)",
+      "actual": {
+        "cli_commands": [
+          "capture",
+          "search",
+          "show",
+          "todos",
+          "tags"
+        ],
+        "runtime_recovery_identifiers": []
+      },
+      "assessment_method": "static_review_with_executed_trace",
+      "status": "violated"
+    },
+    {
+      "id": "P02-delete-write-failure",
+      "obligations": [
+        "O-PERSIST-01",
+        "O-PERSIST-02",
+        "O-PERSIST-05"
+      ],
+      "expected": {
+        "content_unchanged": true,
+        "tags": [
+          "Old"
+        ],
+        "recovery_intent": "retained before mutation"
+      },
+      "actual": {
+        "content_unchanged": true,
+        "tags": [],
+        "error": "injected content write failure",
+        "files": [
+          ".tagfs.db",
+          ".tagfs.ttl",
+          "14_11_2026.md"
+        ]
+      },
+      "assessment_method": "observation_comparison",
+      "status": "violated"
+    },
+    {
+      "id": "P03-tag-replacement-failure",
+      "obligations": [
+        "O-TAG-07",
+        "O-PERSIST-02",
+        "O-PERSIST-05"
+      ],
+      "expected": "Prior/intended associations and operation identity durably retained for recovery",
+      "actual": {
+        "tags": [],
+        "error": "injected tagging failure",
+        "files": [
+          ".tagfs.db",
+          ".tagfs.ttl",
+          "14_11_2026.md"
+        ]
+      },
+      "assessment_method": "static_review_with_executed_trace",
+      "status": "violated"
+    },
+    {
+      "id": "P04-capture-tag-exception",
+      "obligations": [
+        "O-PERSIST-03",
+        "O-QUAL-03"
+      ],
+      "expected": "Report confirmed note save plus pending/partial tagging and recovery identity; never complete success",
+      "actual": {
+        "code": 1,
+        "content_saved": true,
+        "stdout": "",
+        "stderr": "Error: injected tagging failure\n"
+      },
+      "assessment_method": "static_review_with_executed_trace",
+      "status": "violated"
+    },
+    {
+      "id": "P05-capture-tag-rejected",
+      "obligations": [
+        "O-PERSIST-03",
+        "O-QUAL-03"
+      ],
+      "expected": "Report confirmed note save plus pending/partial tagging and recovery identity; never complete success",
+      "actual": {
+        "code": 0,
+        "content_saved": true,
+        "stdout": "Updated 14_11_2026.md\n\nSaved note\n",
+        "stderr": ""
+      },
+      "assessment_method": "static_review_with_executed_trace",
+      "status": "violated"
+    },
+    {
+      "id": "P06-metadata-validation",
+      "obligations": [
+        "O-TODO-08"
+      ],
+      "expected": "Structured observation distinguishes validated due/priority from preserved unvalidated text",
+      "actual": {
+        "existing_task_observations": [
+          {
+            "text": "Invalid",
+            "due": "31-02-2026",
+            "priority": "urgent",
+            "structured_fields": [
+              "due",
+              "file_path",
+              "line_number",
+              "priority",
+              "source_snapshot",
+              "text"
+            ]
+          },
+          {
+            "text": "Valid",
+            "due": "2026-11-16",
+            "priority": "high",
+            "structured_fields": [
+              "due",
+              "file_path",
+              "line_number",
+              "priority",
+              "source_snapshot",
+              "text"
+            ]
+          }
+        ],
+        "generated_invalid_metadata_saved": true,
+        "generated_capture_code": 0,
+        "generated_capture_output": "Proposed content (empty means no append):\n\n- [ ] New generated item [due: 31-02-2026] [priority: urgent]\nUpdated 13_11_2026.md\n\n- [ ] New generated item [due: 31-02-2026] [priority: urgent]\n"
+      },
+      "assessment_method": "static_review_with_executed_trace",
+      "status": "violated"
+    },
+    {
+      "id": "P08-completed-todo-history",
+      "obligations": [
+        "O-TODO-04"
+      ],
+      "expected": "- [ ] Buy milk",
+      "actual": "",
+      "assessment_method": "observation_comparison",
+      "status": "violated"
+    },
+    {
+      "id": "P11-exact-save-and-spans",
+      "obligations": [
+        "O-CAP-06",
+        "O-CAP-10",
+        "O-VIEW-08"
+      ],
+      "expected": "Exact submitted body and exact prefix/suffix outside edited body",
+      "actual": {
+        "code": 0,
+        "body_exact": true,
+        "prefix_exact": true,
+        "suffix_exact": true
+      },
+      "assessment_method": "observation_comparison",
+      "status": "supported_within_scope"
+    }
+  ],
+  "obligations": [
+    {
+      "id": "O-DOC-01",
+      "clause": "DOC-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DOC-02",
+      "clause": "DOC-02",
+      "status": "violated",
+      "probes": [],
+      "tests": [],
+      "scope": "Static documentation defect: the unqualified paragraph after VIEW-09 still says edits/deletion reconstruct whole files, contradicting current code and section 10. Prior reports are historical snapshots."
+    },
+    {
+      "id": "O-DATA-01",
+      "clause": "DATA-01",
+      "status": "violated",
+      "probes": [
+        "P07-relative-year-one"
+      ],
+      "tests": [
+        "test_append_entry_appends_to_existing_daily_file"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-02",
+      "clause": "DATA-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_append_entry_verbatim_uses_serial_suffix_for_same_minute",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-03",
+      "clause": "DATA-03",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_parse_day_sections_returns_timestamp_sections_with_stable_ids",
+        "test_parse_day_sections_supports_serialized_timestamp_headings",
+        "test_parse_day_sections_ignores_text_before_first_timestamp_heading"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-04",
+      "clause": "DATA-04",
+      "status": "violated",
+      "probes": [
+        "P07-relative-year-one"
+      ],
+      "tests": [
+        "test_invalid_day_is_rejected",
+        "test_parse_explicit_day_input_accepts_relative_days"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-05",
+      "clause": "DATA-05",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_backfilled_rewrite_uses_target_day_context",
+        "test_append_entry_appends_to_existing_daily_file"
+      ],
+      "scope": "Static composition plus one explicit backfilled-context trace. Midnight rollover during a single workflow is not independently checked."
+    },
+    {
+      "id": "O-DATA-06",
+      "clause": "DATA-06",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_navigation_orders_calendar_dates_and_excludes_invalid_files",
+        "test_scan_pending_tasks_reads_unchecked_todos_from_all_markdown_files"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-07",
+      "clause": "DATA-07",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_parse_day_sections_returns_timestamp_sections_with_stable_ids",
+        "test_parse_day_sections_supports_serialized_timestamp_headings",
+        "test_parse_day_sections_ignores_text_before_first_timestamp_heading"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DATA-08",
+      "clause": "DATA-08",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_duplicate_section_identity_blocks_mutations",
+        "test_section_for_id_returns_none_for_missing_section"
+      ],
+      "scope": "Domain guards tested; raw viewer diagnostics for duplicate IDs are inspected but terminal presentation is unchecked. Post-capture identity under submitted delimiters is U03."
+    },
+    {
+      "id": "O-DATA-09",
+      "clause": "DATA-09",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [],
+      "scope": "Static derivation/no migration code; externally renamed HTFS metadata behavior has no dedicated executed trace."
+    },
+    {
+      "id": "O-CLI-01",
+      "clause": "CLI-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_build_parser_accepts_capture_day",
+        "test_build_parser_accepts_show_without_day",
+        "test_build_parser_accepts_tag_list_and_tree"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CLI-02",
+      "clause": "CLI-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_cli_requires_bundled_htfs_before_loading_config",
+        "test_cli_htfs_initialization_failure_prevents_capture"
+      ],
+      "scope": "Static exception/dispatch boundary and preflight failure tests. Broad defensive exceptions can hide partial persistence (P04/P05); no exhaustive exit-code trace for every command."
+    },
+    {
+      "id": "O-CFG-01",
+      "clause": "CFG-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_parse_config_text_ignores_comments_and_invalid_lines",
+        "test_load_or_initialize_config_reads_required_entries"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CFG-02",
+      "clause": "CFG-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_load_or_initialize_config_allows_missing_llm_model",
+        "test_load_config_ignores_legacy_htfs_path",
+        "test_bundled_htfs_path_ignores_environment_and_home"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CFG-03",
+      "clause": "CFG-03",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_load_or_initialize_config_non_interactive_missing_required_values_raises",
+        "test_write_config_needs_only_diary_path_and_optional_model"
+      ],
+      "scope": "Non-TTY rejection and serialization tests; full actual terminal configuration prompting is unchecked."
+    },
+    {
+      "id": "O-CFG-04",
+      "clause": "CFG-04",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates"
+      ],
+      "scope": "Constructor/selection inspected; no-model deterministic tests use installed prompt_toolkit. Optional-package absence is a separate violation under CAP-08/VIEW-02."
+    },
+    {
+      "id": "O-DEP-01",
+      "clause": "DEP-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_bundled_htfs_path_ignores_environment_and_home",
+        "test_adapter_rejects_preloaded_external_htfs",
+        "test_bundled_htfs_resource_tagging_survives_reopening"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-DEP-02",
+      "clause": "DEP-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_cli_requires_bundled_htfs_before_loading_config",
+        "test_cli_htfs_initialization_failure_prevents_capture",
+        "test_search_does_not_hide_htfs_read_failures",
+        "test_show_does_not_mask_runtime_errors_as_ui_fallback"
+      ],
+      "scope": "Operational preflight and later read errors tested; post-write error reporting remains separately violated under PERSIST-03. Optional UI import failure prevents help without that package (F01)."
+    },
+    {
+      "id": "O-LLM-01",
+      "clause": "LLM-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_run_show_day_hides_llm_tag_suggestions_when_model_missing",
+        "test_run_tags_suggest_uses_available_htfs_tags"
+      ],
+      "scope": "All model call sites statically inventoried and selected callbacks tested. Real model behavior/service completion is unchecked."
+    },
+    {
+      "id": "O-CAP-01",
+      "clause": "CAP-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_editor_reviews_rewrite_before_draft_replacement",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-02",
+      "clause": "CAP-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-03",
+      "clause": "CAP-03",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_backfilled_rewrite_uses_target_day_context",
+        "test_synthesize_entry_strips_headings_and_preserves_nested_bullets"
+      ],
+      "scope": "Prompt/cleanup contract inspected and finite outputs tested; no claim that a nondeterministic model preserves every fact. Completed/open comparison distinction is violated under TODO-04."
+    },
+    {
+      "id": "O-CAP-04",
+      "clause": "CAP-04",
+      "status": "supported_within_scope",
+      "probes": [
+        "P09-inherited-submit-filter"
+      ],
+      "tests": [
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "scope": "Finite controlled work/success/error/accept/reject traces plus actual inherited-key filter. Live scheduling/rendering and arbitrary completion interleavings remain unchecked."
+    },
+    {
+      "id": "O-CAP-05",
+      "clause": "CAP-05",
+      "status": "unchecked",
+      "probes": [],
+      "tests": [],
+      "scope": "Callback effects and shared lock lifecycle inspected; success/failure/overlap suggestion traces not independently executed."
+    },
+    {
+      "id": "O-CAP-06",
+      "clause": "CAP-06",
+      "status": "supported_within_scope",
+      "probes": [
+        "P11-exact-save-and-spans"
+      ],
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates",
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-13",
+      "clause": "CAP-13",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_text_capture_consent_is_specific_to_displayed_proposal",
+        "test_failed_text_rewrite_retains_original",
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "scope": "Normal successful/RuntimeError callbacks and controlled cancellation/rejection. Arbitrary non-RuntimeError model/normalization failures and physical terminal cancellation remain unchecked."
+    },
+    {
+      "id": "O-CAP-07",
+      "clause": "CAP-07",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_capture_interactive_prompts_for_tags_and_applies_them"
+      ],
+      "scope": "Successful prompt/order/cancellation inspected and tested. Multiple timestamp delimiters in one capture leave post-tag target interpretation U03; failure reporting is separately violated under PERSIST-03."
+    },
+    {
+      "id": "O-CAP-08",
+      "clause": "CAP-08",
+      "status": "violated",
+      "probes": [
+        "P01-optional-ui-import"
+      ],
+      "tests": [],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-09",
+      "clause": "CAP-09",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "scope": "Text workflow contains no UI editor/tag call; empty accepted proposal tested. All-whitespace original text observed only by inspection."
+    },
+    {
+      "id": "O-CAP-10",
+      "clause": "CAP-10",
+      "status": "supported_within_scope",
+      "probes": [
+        "P11-exact-save-and-spans"
+      ],
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates",
+        "test_editor_capture_saves_final_buffer_without_postprocessing",
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-11",
+      "clause": "CAP-11",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_unattended_capture_preserves_exact_input_and_duplicates",
+        "test_todo_proposal_removes_existing_and_new_duplicate_open_todos"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-CAP-12",
+      "clause": "CAP-12",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_text_capture_consent_is_specific_to_displayed_proposal"
+      ],
+      "scope": "Empty/rejected proposal tested and accepted similar-task report inspected. No end-to-end semantic-omission report trace was executed."
+    },
+    {
+      "id": "O-TODO-01",
+      "clause": "TODO-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_scan_pending_tasks_reads_unchecked_todos_from_all_markdown_files",
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-02",
+      "clause": "TODO-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_only_proposed_open_todos_expand_dates",
+        "test_unattended_capture_preserves_exact_input_and_duplicates"
+      ],
+      "scope": "Ordinary date inputs tested; date.max overflow and metadata validity remain separate TODO-08 obligations."
+    },
+    {
+      "id": "O-TODO-03",
+      "clause": "TODO-03",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_invalid_todo_selection_rejects_entire_batch",
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch"
+      ],
+      "scope": "Numeric invalid/batch paths and duplicate completion tested; live interactive checklist selection is unchecked."
+    },
+    {
+      "id": "O-TODO-04",
+      "clause": "TODO-04",
+      "status": "violated",
+      "probes": [
+        "P08-completed-todo-history"
+      ],
+      "tests": [
+        "test_todo_proposal_ignores_optional_todo_metadata",
+        "test_todo_proposal_removes_existing_and_new_duplicate_open_todos"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-05",
+      "clause": "TODO-05",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_todo_proposal_can_omit_a_declined_similar_task",
+        "test_unattended_capture_preserves_exact_input_and_duplicates"
+      ],
+      "scope": "Helper omission and final-original selection tested separately; actual semantic model and interactive-editor cross-history similarity path are unchecked."
+    },
+    {
+      "id": "O-TODO-06",
+      "clause": "TODO-06",
+      "status": "unchecked",
+      "probes": [],
+      "tests": [],
+      "scope": "Explicit catch inspected. Malformed response shape and a missing client have separate errors; failure-policy boundaries beyond transport are U04."
+    },
+    {
+      "id": "O-TODO-07",
+      "clause": "TODO-07",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [],
+      "scope": "All production call sites inspected; existing capture tests and source routing have no checklist call."
+    },
+    {
+      "id": "O-TODO-08",
+      "clause": "TODO-08",
+      "status": "violated",
+      "probes": [
+        "P06-metadata-validation"
+      ],
+      "tests": [
+        "test_only_proposed_open_todos_expand_dates"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-09",
+      "clause": "TODO-09",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_unattended_todos_lists_without_prompting_or_mutating"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TODO-10",
+      "clause": "TODO-10",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch"
+      ],
+      "scope": "Stale second-file batch abort tested; full raw snapshot equality establishes fields at selected offsets. Later physical multi-file failures require PERSIST and are not claimed atomic."
+    },
+    {
+      "id": "O-VIEW-01",
+      "clause": "VIEW-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_show_day_defaults_to_today_when_day_omitted",
+        "test_run_show_day_asks_to_show_latest_entry_when_today_missing",
+        "test_run_show_day_reports_missing_file"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-VIEW-02",
+      "clause": "VIEW-02",
+      "status": "violated",
+      "probes": [
+        "P01-optional-ui-import"
+      ],
+      "tests": [
+        "test_viewer_is_read_only_and_boundary_navigation_is_noop",
+        "test_run_show_day_falls_back_to_stdout_when_ui_unavailable"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-VIEW-03",
+      "clause": "VIEW-03",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_navigation_orders_calendar_dates_and_excludes_invalid_files",
+        "test_viewer_is_read_only_and_boundary_navigation_is_noop"
+      ],
+      "scope": "Order/boundaries and real navigation bindings tested. Picker query, selection, cancellation and actual terminal rendering inspected but not independently executed."
+    },
+    {
+      "id": "O-VIEW-04",
+      "clause": "VIEW-04",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_todo_completion_changes_only_selected_state_and_rejects_stale_batch",
+        "test_section_mutation_preserves_all_outside_bytes"
+      ],
+      "scope": "Domain mutations tested; actual e-key nested editor/cursor and empty-edit interaction are unchecked."
+    },
+    {
+      "id": "O-VIEW-05",
+      "clause": "VIEW-05",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_viewer_tag_cancel_clear_replace_are_distinct",
+        "test_delete_section_removes_markdown_section_and_htfs_resource"
+      ],
+      "scope": "Successful tag/delete operations tested. Actual d-dialog decline and physical nested-terminal execution are unchecked; deletion failure ordering is violated separately under PERSIST-01."
+    },
+    {
+      "id": "O-VIEW-06",
+      "clause": "VIEW-06",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_viewer_tag_cancel_clear_replace_are_distinct"
+      ],
+      "scope": "Refresh code and exit bindings inspected; real exit events and delete-to-empty refresh not independently exercised."
+    },
+    {
+      "id": "O-VIEW-07",
+      "clause": "VIEW-07",
+      "status": "unchecked",
+      "probes": [],
+      "tests": [],
+      "scope": "Required calls/thread flags are present by static inspection; no live nested-terminal execution was performed. A mocked flag alone is insufficient evidence for the full obligation."
+    },
+    {
+      "id": "O-VIEW-08",
+      "clause": "VIEW-08",
+      "status": "supported_within_scope",
+      "probes": [
+        "P11-exact-save-and-spans"
+      ],
+      "tests": [
+        "test_section_mutation_preserves_all_outside_bytes"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-VIEW-09",
+      "clause": "VIEW-09",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_duplicate_section_identity_blocks_mutations",
+        "test_delete_section_returns_none_when_heading_is_missing"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-01",
+      "clause": "TAG-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_bundled_htfs_path_ignores_environment_and_home",
+        "test_adapter_rejects_preloaded_external_htfs",
+        "test_bundled_htfs_resource_tagging_survives_reopening"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-02",
+      "clause": "TAG-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_htfs_adapter_maps_section_to_resource_path_and_back",
+        "test_htfs_adapter_loads_section_from_resource_path"
+      ],
+      "scope": "Roundtrip and resolved section tests use in-boundary paths. Foreign-resource basename collisions and post-capture manual timestamp choice are U03."
+    },
+    {
+      "id": "O-TAG-03",
+      "clause": "TAG-03",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_tag_prompt_requires_explicit_creation_consent",
+        "test_comma_separated_tag_completer_completes_after_commas"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-04",
+      "clause": "TAG-04",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_tags_apply_creates_and_applies_tags",
+        "test_bundled_htfs_resource_tagging_survives_reopening"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-TAG-05",
+      "clause": "TAG-05",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_tags_apply_creates_and_applies_tags",
+        "test_run_tags_suggest_uses_available_htfs_tags",
+        "test_viewer_tag_cancel_clear_replace_are_distinct"
+      ],
+      "scope": "Successful outcomes and inventory filtering inspected/tested. Replacement/capture partial-failure handling is not supported by these tests; see P03/P04/P05."
+    },
+    {
+      "id": "O-TAG-06",
+      "clause": "TAG-06",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_tags_delete_recursively_deletes_descendants_first",
+        "test_run_tags_delete_blocks_when_tags_are_used"
+      ],
+      "scope": "Child order/usage guards tested; non-TTY confirmation and partial taxonomy-deletion failure inspected but not fault-injected."
+    },
+    {
+      "id": "O-TAG-07",
+      "clause": "TAG-07",
+      "status": "violated",
+      "probes": [
+        "P03-tag-replacement-failure"
+      ],
+      "tests": [
+        "test_viewer_tag_cancel_clear_replace_are_distinct"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-01",
+      "clause": "PERSIST-01",
+      "status": "violated",
+      "probes": [
+        "P02-delete-write-failure"
+      ],
+      "tests": [],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-02",
+      "clause": "PERSIST-02",
+      "status": "violated",
+      "probes": [
+        "P02-delete-write-failure",
+        "P03-tag-replacement-failure"
+      ],
+      "tests": [],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-03",
+      "clause": "PERSIST-03",
+      "status": "violated",
+      "probes": [
+        "P04-capture-tag-exception",
+        "P05-capture-tag-rejected"
+      ],
+      "tests": [],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-04",
+      "clause": "PERSIST-04",
+      "status": "violated",
+      "probes": [
+        "P10-recovery-interface"
+      ],
+      "tests": [],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-PERSIST-05",
+      "clause": "PERSIST-05",
+      "status": "violated",
+      "probes": [
+        "P02-delete-write-failure",
+        "P03-tag-replacement-failure"
+      ],
+      "tests": [],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-01",
+      "clause": "SEARCH-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_search_returns_best_matching_history_chunks",
+        "test_search_matches_sections_via_tags"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-02",
+      "clause": "SEARCH-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_search_supports_raw_tag_expressions_without_llm"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-03",
+      "clause": "SEARCH-03",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_search_translates_natural_language_tag_filters_when_llm_enabled",
+        "test_run_search_supports_raw_tag_expressions_without_llm"
+      ],
+      "scope": "Translation routing and scoped success tested; actual invalid-expression/backend parser failures are inspected only, with no new executed invalid-filter trace."
+    },
+    {
+      "id": "O-SEARCH-04",
+      "clause": "SEARCH-04",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_answer_query_includes_section_tags_in_prompt"
+      ],
+      "scope": "Prompt inspected/tested. No claim of factual model output or complete live-model compliance."
+    },
+    {
+      "id": "O-SEARCH-05",
+      "clause": "SEARCH-05",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_run_search_falls_back_to_basic_text_search_when_llm_is_unavailable"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-SEARCH-06",
+      "clause": "SEARCH-06",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [],
+      "scope": "All search code paths inspected; empty-answer early return is explicit. Metadata initialization at operational startup is separately required, so no assertion of a write-free whole CLI invocation."
+    },
+    {
+      "id": "O-QUAL-01",
+      "clause": "QUAL-01",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [],
+      "scope": "Dependency/call-site inspection, not a network-isolation proof."
+    },
+    {
+      "id": "O-QUAL-02",
+      "clause": "QUAL-02",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_editor_reviews_rewrite_before_draft_replacement"
+      ],
+      "scope": "Shared executor use and lock transitions tested with deterministic scheduled work. Actual worker-thread execution and all toolbar rendering states remain unchecked."
+    },
+    {
+      "id": "O-QUAL-03",
+      "clause": "QUAL-03",
+      "status": "violated",
+      "probes": [
+        "P01-optional-ui-import",
+        "P04-capture-tag-exception",
+        "P05-capture-tag-rejected"
+      ],
+      "tests": [
+        "test_cli_htfs_initialization_failure_prevents_capture",
+        "test_search_does_not_hide_htfs_read_failures"
+      ],
+      "scope": "Static inspection and the referenced finite test cases; not a universal refinement proof."
+    },
+    {
+      "id": "O-QUAL-04",
+      "clause": "QUAL-04",
+      "status": "supported_within_scope",
+      "probes": [],
+      "tests": [
+        "test_append_entry_verbatim_uses_serial_suffix_for_same_minute"
+      ],
+      "scope": "Storage/identity derivation and entrypoint compatibility inspected and ordinary historical formats tested. New relative-date rendering boundary failure is recorded under DATA-01/04."
+    }
+  ],
+  "summary": {
+    "obligations": {
+      "supported_within_scope": 57,
+      "violated": 14,
+      "unchecked": 3
+    },
+    "probes": {
+      "violated": 9,
+      "supported_within_scope": 2
+    }
+  },
+  "unchecked": [
+    {
+      "id": "U01",
+      "scope": "Live prompt_toolkit terminal rendering, nested synchronous execution and worker scheduling; CAP-05 suggestion-specific traces and VIEW-07."
+    },
+    {
+      "id": "U02",
+      "scope": "Live Ollama factual output, timeout/cancellation/liveness, arbitrary malformed responses and performance; no universal model guarantees are asserted."
+    },
+    {
+      "id": "U03",
+      "scope": "Capture text containing manually entered timestamp delimiters: post-save tagging currently selects latest parsed section; desired target among multiple new sections is not explicit. Foreign HTFS resource paths sharing a diary basename are not separately validated in this audit."
+    },
+    {
+      "id": "U04",
+      "scope": "TODO-06 states similarity-model call failure yields no match. Transport/model-call exceptions are caught, but missing client/malformed response raises. Whether malformed response is a call failure is unclear; record the boundary rather than silently narrowing it."
+    },
+    {
+      "id": "U05",
+      "scope": "Actual device/power loss, concurrent external writes after validation, arbitrary process crashes and nondeterministic schedules; no unsupported atomicity/durability/progress promise."
+    },
+    {
+      "id": "U06",
+      "scope": "No compiled concrete-to-abstract refinement proof or Lean witness reuse; all support is static or finite execution evidence."
+    }
+  ],
+  "limitations": "Static inspection and finite controlled traces; no universal refinement, durability, liveness or live terminal/model proof."
+}

@@ -151,6 +151,25 @@ class HTFSAdapter:
         with self._session() as client:
             return bool(client.del_tag(tag_name))
 
+    def taxonomy_state(self) -> dict[str, list[str]]:
+        with self._session() as client:
+            return {
+                tag: sorted(client.th.get_parent_tags(tag))
+                for tag in client.get_tags_list([])
+            }
+
+    def resource_paths_for_tags(self, tags: Iterable[str]) -> list[str]:
+        with self._session() as client:
+            existing = set(client.get_tags_list([]))
+            return sorted(
+                {
+                    path
+                    for tag in tags
+                    if tag in existing
+                    for path in client.get_resources_by_tag([tag])
+                }
+            )
+
     def get_all_tag_paths(self) -> list[str]:
         """Get all possible hierarchical tag paths."""
         with self._session() as client:
@@ -179,6 +198,12 @@ class HTFSAdapter:
         with self._session() as client:
             return list(
                 client.get_resource_tags(self.resource_path_for_section(section))
+            )
+
+    def section_resource_exists(self, section: DiarySection) -> bool:
+        with self._session() as client:
+            return bool(
+                client.is_resource_tracked(self.resource_path_for_section(section))
             )
 
     def clear_section_tags(self, section: DiarySection) -> None:

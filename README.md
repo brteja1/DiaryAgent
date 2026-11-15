@@ -6,7 +6,7 @@ A local-first Python terminal diary with daily Markdown notes, persistent TODOs,
 
 ## Implementation status
 
-The specification includes approved targets that are not yet implemented. Current regression success is not a claim of full conformance.
+The approved contracts have regression and fault-injection coverage. The [conformance review](docs/conformance/ConformanceReview.md) records repaired violations and remaining unchecked integration behavior; passing tests are not a universal conformance proof.
 
 | Area | Current status |
 | --- | --- |
@@ -14,14 +14,14 @@ The specification includes approved targets that are not yet implemented. Curren
 | TODO review (D-02) and five LLM tasks (D-03) | Current routing/task inventory agrees with the decisions. |
 | Consent and verbatim saves (D-01) | Implemented save/consent paths, with focused acceptance tests. |
 | Calendar navigation, identity guards and byte preservation (D-04–06) | Implemented using parsed dates, uniqueness guards and exact source spans. |
-| Recovery and tag cancellation (D-08–09) | Cancellation/accepted-empty distinguished. Recovery journal/retry remains pending. |
+| Recovery and tag cancellation (D-08–09) | Distinct selections, recorded intent, content-first writes, metadata retries and retained receipts are implemented. |
 | Documentation authority (D-10) | Applied in the documentation. |
-| TODO metadata (D-11) | Proposal dates use `DD-MM-YYYY`; structured metadata validation/presentation remains pending. |
+| TODO metadata (D-11) | Generated fields are validated; raw legacy/unvalidated fields are preserved and labeled in task views. |
 | Unattended/stale selection (D-12) | Read-only non-TTY listing, selection validation and snapshot guards implemented. |
 
 The authoritative specification records the exact targets, acceptance examples and remaining gaps.
 
-All twelve recorded decisions are resolved in specification v1.0; the pending rows above describe implementation work, not unanswered product choices.
+All twelve recorded decisions are resolved in specification v1.0. See the review for the exact tested scope and unverified terminal/model behavior.
 
 ## Setup
 
@@ -96,7 +96,7 @@ python diary_agent.py show -1
 python diary_agent.py show 25_03_2026
 ```
 
-`todos` reviews pending checkboxes across immediate diary Markdown files. D-11's approved metadata target uses `[due: 16-11-2026] [priority: high]` for new generated values, preserving existing valid hyphen/ISO/underscore dates and unknown/invalid metadata as unvalidated text. Relative dates may be expanded only for open tasks within an accepted LLM proposal; completed dates stay unchanged. Proposal expansion is implemented; structured validation and presentation of unvalidated fields remain pending. Diary filenames and explicit day arguments remain `dd_mm_yyyy`. A missing model does not prevent checkbox discovery/completion, but HTFS remains mandatory.
+`todos` reviews pending checkboxes across immediate diary Markdown files. D-11's approved metadata target uses `[due: 16-11-2026] [priority: high]` for new generated values, preserving existing valid hyphen/ISO/underscore dates and unknown/invalid metadata as unvalidated text. Relative dates may be expanded only for open tasks within an accepted LLM proposal; completed dates stay unchanged. Task views mark unknown priorities and invalid due values as unvalidated. Invalid newly generated fields fail proposal preparation, retaining the original note; verbatim saves remain unrestricted. Diary filenames and explicit day arguments remain `dd_mm_yyyy`. A missing model does not prevent checkbox discovery/completion, but HTFS remains mandatory.
 
 With noninteractive stdin, `todos` lists tasks without prompts or changes. Malformed/out-of-range interactive selections are rejected as a whole. Completion checks affected-file snapshots before writing and requires reselection after changes; this does not make multiple writes atomic.
 
@@ -110,7 +110,7 @@ With noninteractive stdin, `todos` lists tasks without prompts or changes. Malfo
 | `e` / `t` / `d` | Edit, manage tags, or confirm deletion of the section at the cursor. |
 | `q` / `Esc` / `Ctrl+C` | Exit. |
 
-Without prompt_toolkit, viewing prints to stdout. Direct typing does not edit the viewer. Duplicate IDs block section mutations; edits preserve bytes outside their target. Cancellation preserves tags and an accepted empty selection clears them. Cross-store recovery remains pending under D-08.
+Without prompt_toolkit, viewing prints to stdout. Direct typing does not edit the viewer. Duplicate IDs block section mutations; edits preserve bytes outside their target. Cancellation preserves tags and an accepted empty selection clears them. Persistence failures report saved/partial/uncertain state and a recovery operation ID. The viewer reloads committed content even when metadata reconciliation fails.
 
 ## Tags and search
 
@@ -131,6 +131,22 @@ Tagging is at timestamp-section level. HTFS owns hierarchical path creation; res
 
 Search retrieves local excerpts and tags. A configured model may synthesize an answer or translate a natural-language tag filter. Without a model, use HTFS expressions (`&`, `|`, `~`, parentheses); a tag-only search lists matching sections. Answer-synthesis failures can fall back to local excerpts; HTFS failures do not permit a tag-free fallback, and filter failures never silently widen the search.
 
+## Recovery
+
+Before diary or tag changes, intent is written under `<diary_path>/.diary-agent/operations/`. Records retain content fingerprints, prior/intended associations, progress and errors. Content changes are verified before metadata deletion; tag-only operations leave Markdown untouched. Capture tagging is a separate operation after the saved capture.
+
+```bash
+python diary_agent.py recovery list
+python diary_agent.py recovery show OPERATION_ID
+python diary_agent.py recovery retry OPERATION_ID
+python diary_agent.py recovery list --all
+python diary_agent.py recovery resolve OPERATION_ID --reason "Kept the current state" --yes
+```
+
+Retry checks content, unique targets and recorded metadata state. It never appends, edits, completes tasks or deletes diary content again. Divergence requires inspection; an unconfirmed content write is not replayed. Completed/resolved records remain receipts, so later manual changes survive repeated retries. Explicit resolution records the user's decision without changing either data store. Mandatory HTFS preflight still applies.
+
+These are recovery guarantees, not atomic transactions, automatic rollback, multi-process isolation or a power-loss durability promise. See [Design](docs/Design.md) for record structure and [tests](docs/Testing.md) for fault boundaries.
+
 ## Development and verification
 
 ```text
@@ -140,6 +156,8 @@ diary_agent_app/
   commands.py                  User workflows and output
   service.py                   Diary operations without terminal UI
   markdown.py                  Source spans and localized section mutation
+  persistence.py               Intent journal, outcomes and metadata-only retry
+  todo_metadata.py             Nonmutating metadata interpretation
   models.py                    Shared records
   core.py                      Config, parsing, TODO and retrieval helpers
   llm.py                       Five tasks, shared Ollama transport

@@ -4,6 +4,7 @@ import asyncio
 import datetime as dt
 import sys
 from dataclasses import dataclass, field
+from html import escape
 from typing import TypeVar
 from collections.abc import Callable, Sequence
 
@@ -31,6 +32,7 @@ try:
     from prompt_toolkit.styles import Style
 except ImportError:  # pragma: no cover - runtime dependency
     Application = None
+    run_in_terminal = None
     HSplit = None
     Layout = None
     ConditionalContainer = None
@@ -109,7 +111,7 @@ def _prompt_should_run_in_thread() -> bool:
 def status_toolbar(state: str) -> HTML:
     now = dt.datetime.now().strftime("%d %b %Y %H:%M")
     return HTML(
-        f"<b> Date:</b> {now}  <b>State:</b> {state}  "
+        f"<b> Date:</b> {now}  <b>State:</b> {escape(state)}  "
         "<style fg='ansiyellow'>Ctrl+D</style> submit"
     )
 
